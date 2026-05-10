@@ -71,6 +71,7 @@ body {
   gap: 8px;
   padding: 14px 28px;
   border-radius: 12px;
+  font-family: inherit;
   font-weight: 600;
   font-size: 0.95rem;
   text-decoration: none;
@@ -147,7 +148,6 @@ body {
 .nav-cta {
   background: linear-gradient(135deg, #00f0ff, #ff00e5);
   color: #07070f;
-  font-weight: 700;
   text-decoration: none;
   font-size: 0.875rem;
   font-weight: 600;
@@ -366,6 +366,8 @@ body {
   border: none;
   box-shadow: 0 0 40px rgba(0,240,255,0.25), 0 0 60px rgba(255,0,229,0.2);
 }
+
+.feature-card--highlight h3 { color: #07070f; }
 
 .feature-icon {
   width: 52px; height: 52px;
