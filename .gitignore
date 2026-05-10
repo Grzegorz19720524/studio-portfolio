@@ -31,3 +31,4 @@ bin/
 
 ### Claude Code ###
 .mcp.json
+.claude/
