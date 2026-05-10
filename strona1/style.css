@@ -471,6 +471,119 @@ body {
   color: rgba(255,255,255,0.7);
 }
 
+/* ===== PRICING ===== */
+.pricing {
+  padding: 100px 5%;
+  background: var(--dark-2);
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.pricing-card {
+  background: var(--dark-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 32px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+.pricing-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0,240,255,0.4);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 20px rgba(0,240,255,0.1);
+}
+
+.pricing-card--featured {
+  background: linear-gradient(160deg, #0e0e2a, #131330);
+  border-color: rgba(0,240,255,0.5);
+  box-shadow: 0 0 40px rgba(0,240,255,0.15), 0 0 60px rgba(255,0,229,0.1);
+  transform: translateY(-8px);
+}
+.pricing-card--featured:hover {
+  transform: translateY(-12px);
+  border-color: rgba(0,240,255,0.8);
+}
+
+.pricing-popular {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #00f0ff, #ff00e5);
+  color: #07070f;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 16px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.pricing-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.pricing-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.pricing-amount {
+  font-size: 2.8rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+.pricing-currency {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pricing-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 28px;
+  min-height: 56px;
+}
+
+.pricing-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.pricing-features li {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.pricing-feature--off {
+  color: var(--text-muted) !important;
+  opacity: 0.5;
+}
+
+@media (max-width: 900px) {
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .pricing-card--featured { transform: none; }
+  .pricing-card--featured:hover { transform: translateY(-4px); }
+}
+
 /* ===== CONTACT ===== */
 .contact {
   padding: 100px 5%;
