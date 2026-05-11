@@ -30,6 +30,7 @@ from util.env_utils import (
 )
 from util.event_utils import EventEmitter
 from util.queue_utils import Queue, PriorityQueue
+from util.pool_utils import ObjectPool, PoolContext
 
 __all__ = [
     "get_logger",
@@ -108,4 +109,6 @@ __all__ = [
     "EventEmitter",
     "Queue",
     "PriorityQueue",
+    "ObjectPool",
+    "PoolContext",
 ]
