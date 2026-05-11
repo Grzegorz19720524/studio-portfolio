@@ -23,6 +23,7 @@ from util.string_utils import (
     reverse, is_palindrome, pad_left, pad_right,
 )
 from util.cache_utils import Cache
+from util.retry_utils import retry, retry_with_jitter, with_fallback
 
 __all__ = [
     "get_logger",
@@ -86,4 +87,7 @@ __all__ = [
     "pad_left",
     "pad_right",
     "Cache",
+    "retry",
+    "retry_with_jitter",
+    "with_fallback",
 ]
