@@ -17,6 +17,11 @@ from util.math_utils import (
     clamp, lerp, normalize, mean, median,
     variance, std_dev, round_to, percentage, is_prime,
 )
+from util.string_utils import (
+    camel_to_snake, snake_to_camel, snake_to_pascal,
+    capitalize_words, remove_whitespace, count_words,
+    reverse, is_palindrome, pad_left, pad_right,
+)
 
 __all__ = [
     "get_logger",
@@ -69,4 +74,14 @@ __all__ = [
     "round_to",
     "percentage",
     "is_prime",
+    "camel_to_snake",
+    "snake_to_camel",
+    "snake_to_pascal",
+    "capitalize_words",
+    "remove_whitespace",
+    "count_words",
+    "reverse",
+    "is_palindrome",
+    "pad_left",
+    "pad_right",
 ]
