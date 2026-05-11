@@ -250,6 +250,10 @@ from util.event_bus_utils import (
     subscribe, unsubscribe, once, publish, emit,
     publish_async, on, use, clear, listeners, listener_count, wait_for,
 )
+from util.circuit_breaker_utils import (
+    State as CircuitState, CircuitBreakerOpen, CircuitBreaker,
+    CircuitBreakerRegistry, circuit_breaker,
+)
 
 __all__ = [
     "get_logger",
@@ -841,4 +845,9 @@ __all__ = [
     "listeners",
     "listener_count",
     "wait_for",
+    "CircuitState",
+    "CircuitBreakerOpen",
+    "CircuitBreaker",
+    "CircuitBreakerRegistry",
+    "circuit_breaker",
 ]
