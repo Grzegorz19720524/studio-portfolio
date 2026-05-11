@@ -24,6 +24,10 @@ from util.string_utils import (
 )
 from util.cache_utils import Cache
 from util.retry_utils import retry, retry_with_jitter, with_fallback
+from util.env_utils import (
+    get_env, require_env, get_bool, get_int, get_float,
+    get_list, load_dotenv, is_production, is_development,
+)
 
 __all__ = [
     "get_logger",
@@ -90,4 +94,13 @@ __all__ = [
     "retry",
     "retry_with_jitter",
     "with_fallback",
+    "get_env",
+    "require_env",
+    "get_bool",
+    "get_int",
+    "get_float",
+    "get_list",
+    "load_dotenv",
+    "is_production",
+    "is_development",
 ]
