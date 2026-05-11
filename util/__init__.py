@@ -207,6 +207,13 @@ from util.ini_utils import (
     set_value, has_section, has_key, sections, keys, items,
     to_dict, from_dict, remove_section, remove_key, merge,
 )
+from util.toml_utils import (
+    read_toml, write_toml,
+    parse_string as toml_parse_string, to_string as toml_to_string,
+    get as toml_get, set_value as toml_set_value,
+    has_key as toml_has_key, merge as toml_merge,
+    flatten_keys, keys_at,
+)
 
 __all__ = [
     "get_logger",
@@ -711,4 +718,14 @@ __all__ = [
     "remove_section",
     "remove_key",
     "merge",
+    "read_toml",
+    "write_toml",
+    "toml_parse_string",
+    "toml_to_string",
+    "toml_get",
+    "toml_set_value",
+    "toml_has_key",
+    "toml_merge",
+    "flatten_keys",
+    "keys_at",
 ]
