@@ -39,6 +39,9 @@ from util.graph_utils import (Graph, bfs, dfs, shortest_path, dijkstra, has_cycl
 from util.validation_utils import (ValidationError, ValidationResult, validate, validate_type,
                                     validate_range, validate_length, validate_pattern,
                                     validate_choices, validate_required, Validator)
+from util.http_client_utils import (HttpError, Response, HttpClient,
+                                     build_url, encode_params, parse_url)
+from util.smtp_utils import (SmtpError, Attachment, EmailMessage, SmtpClient, message)
 
 
 class TestHelpers(unittest.TestCase):
@@ -1182,6 +1185,476 @@ class TestValidationUtils(unittest.TestCase):
         self.assertFalse(vr.is_valid)
         with self.assertRaises(ValidationError):
             vr.raise_if_invalid()
+
+
+class TestHttpError(unittest.TestCase):
+    def test_attributes(self):
+        e = HttpError(404, "Not Found", "missing")
+        self.assertEqual(e.status, 404)
+        self.assertEqual(e.reason, "Not Found")
+        self.assertEqual(e.body, "missing")
+
+    def test_str(self):
+        e = HttpError(500, "Internal Server Error")
+        self.assertIn("500", str(e))
+        self.assertIn("Internal Server Error", str(e))
+
+    def test_default_body(self):
+        e = HttpError(400, "Bad Request")
+        self.assertEqual(e.body, "")
+
+    def test_is_exception(self):
+        with self.assertRaises(HttpError):
+            raise HttpError(403, "Forbidden")
+
+
+class TestResponse(unittest.TestCase):
+    def _make(self, status=200, reason="OK", headers=None, raw=b"hello", url="http://x.com"):
+        return Response(status, reason, headers or {}, raw, url)
+
+    def test_ok_true(self):
+        self.assertTrue(self._make(200).ok)
+        self.assertTrue(self._make(201).ok)
+        self.assertTrue(self._make(299).ok)
+
+    def test_ok_false(self):
+        self.assertFalse(self._make(400).ok)
+        self.assertFalse(self._make(404).ok)
+        self.assertFalse(self._make(500).ok)
+
+    def test_text_utf8(self):
+        r = self._make(raw=b"caf\xc3\xa9")
+        self.assertEqual(r.text, "café")
+
+    def test_text_charset_from_header(self):
+        r = self._make(headers={"content-type": "text/html; charset=latin-1"}, raw="é".encode("latin-1"))
+        self.assertIsInstance(r.text, str)
+
+    def test_json(self):
+        r = self._make(raw=b'{"key": 1}')
+        self.assertEqual(r.json(), {"key": 1})
+
+    def test_raise_for_status_ok(self):
+        self._make(200).raise_for_status()
+
+    def test_raise_for_status_error(self):
+        with self.assertRaises(HttpError) as ctx:
+            self._make(404, "Not Found").raise_for_status()
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_repr(self):
+        r = self._make(200, url="http://example.com")
+        self.assertIn("200", repr(r))
+        self.assertIn("example.com", repr(r))
+
+    def test_attributes(self):
+        r = self._make(201, "Created", {"x-id": "abc"}, b"body", "http://y.com")
+        self.assertEqual(r.status, 201)
+        self.assertEqual(r.reason, "Created")
+        self.assertEqual(r.headers, {"x-id": "abc"})
+        self.assertEqual(r.content, b"body")
+        self.assertEqual(r.url, "http://y.com")
+
+
+class TestBuildUrl(unittest.TestCase):
+    def test_no_path_no_params(self):
+        self.assertEqual(build_url("https://api.example.com"), "https://api.example.com")
+
+    def test_with_path(self):
+        self.assertEqual(build_url("https://api.example.com", "/users"), "https://api.example.com/users")
+
+    def test_strips_trailing_slash(self):
+        self.assertEqual(build_url("https://api.example.com/", "/users"), "https://api.example.com/users")
+
+    def test_with_params(self):
+        url = build_url("https://api.example.com", "/search", {"q": "hello", "page": 1})
+        self.assertIn("q=hello", url)
+        self.assertIn("page=1", url)
+
+    def test_none_params_filtered(self):
+        url = build_url("https://api.example.com", "", {"q": "x", "empty": None})
+        self.assertNotIn("empty", url)
+        self.assertIn("q=x", url)
+
+
+class TestEncodeParams(unittest.TestCase):
+    def test_basic(self):
+        result = encode_params({"a": "1", "b": "2"})
+        self.assertIn("a=1", result)
+        self.assertIn("b=2", result)
+
+    def test_none_filtered(self):
+        result = encode_params({"a": "x", "b": None})
+        self.assertNotIn("b", result)
+        self.assertIn("a=x", result)
+
+    def test_special_chars_encoded(self):
+        result = encode_params({"q": "hello world"})
+        self.assertIn("hello+world", result)
+
+    def test_empty(self):
+        self.assertEqual(encode_params({}), "")
+
+
+class TestParseUrl(unittest.TestCase):
+    def test_full_url(self):
+        parts = parse_url("https://api.example.com/v1/users?page=2#top")
+        self.assertEqual(parts["scheme"], "https")
+        self.assertEqual(parts["host"], "api.example.com")
+        self.assertEqual(parts["path"], "/v1/users")
+        self.assertEqual(parts["query"], "page=2")
+        self.assertEqual(parts["fragment"], "top")
+
+    def test_simple_url(self):
+        parts = parse_url("http://localhost:8080/")
+        self.assertEqual(parts["scheme"], "http")
+        self.assertIn("localhost", parts["host"])
+
+    def test_no_query_no_fragment(self):
+        parts = parse_url("https://example.com/path")
+        self.assertEqual(parts["query"], "")
+        self.assertEqual(parts["fragment"], "")
+
+
+class TestHttpClient(unittest.TestCase):
+    def test_repr(self):
+        client = HttpClient(base_url="https://api.example.com", timeout=5.0)
+        r = repr(client)
+        self.assertIn("api.example.com", r)
+        self.assertIn("5.0", r)
+
+    def test_default_headers(self):
+        client = HttpClient()
+        self.assertIn("Accept", client._headers)
+        self.assertIn("User-Agent", client._headers)
+
+    def test_custom_headers(self):
+        client = HttpClient(headers={"X-Custom": "value"})
+        self.assertEqual(client._headers["X-Custom"], "value")
+
+    def test_set_header(self):
+        client = HttpClient()
+        client.set_header("X-Token", "abc123")
+        self.assertEqual(client._headers["X-Token"], "abc123")
+
+    def test_set_bearer(self):
+        client = HttpClient()
+        client.set_bearer("my-token")
+        self.assertEqual(client._headers["Authorization"], "Bearer my-token")
+
+    def test_set_auth_basic(self):
+        import base64
+        client = HttpClient()
+        client.set_auth("user", "pass")
+        token = base64.b64encode(b"user:pass").decode()
+        self.assertEqual(client._headers["Authorization"], f"Basic {token}")
+
+    def test_auth_in_constructor(self):
+        import base64
+        client = HttpClient(auth=("user", "pass"))
+        token = base64.b64encode(b"user:pass").decode()
+        self.assertEqual(client._headers["Authorization"], f"Basic {token}")
+
+    def test_base_url_strips_slash(self):
+        client = HttpClient(base_url="https://example.com/")
+        self.assertEqual(client.base_url, "https://example.com")
+
+    def test_retry_on_defaults(self):
+        client = HttpClient()
+        self.assertIn(500, client.retry_on)
+        self.assertIn(503, client.retry_on)
+
+
+class TestSmtpError(unittest.TestCase):
+    def test_is_exception(self):
+        with self.assertRaises(SmtpError):
+            raise SmtpError("connection failed")
+
+    def test_message(self):
+        e = SmtpError("timeout")
+        self.assertEqual(str(e), "timeout")
+
+
+class TestAttachment(unittest.TestCase):
+    def test_filename_from_path(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"data")
+            path = f.name
+        try:
+            att = Attachment(path)
+            self.assertEqual(att.filename, os.path.basename(path))
+            self.assertFalse(att.inline)
+            self.assertIsNone(att.cid)
+        finally:
+            os.unlink(path)
+
+    def test_custom_filename(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"data")
+            path = f.name
+        try:
+            att = Attachment(path, filename="custom.txt")
+            self.assertEqual(att.filename, "custom.txt")
+        finally:
+            os.unlink(path)
+
+    def test_inline_with_cid(self):
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(b"\x89PNG")
+            path = f.name
+        try:
+            att = Attachment(path, cid="img001")
+            self.assertTrue(att.inline)
+            self.assertEqual(att.cid, "img001")
+        finally:
+            os.unlink(path)
+
+    def test_read(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"hello bytes")
+            path = f.name
+        try:
+            att = Attachment(path)
+            self.assertEqual(att.read(), b"hello bytes")
+        finally:
+            os.unlink(path)
+
+    def test_mime_type_txt(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            path = f.name
+        try:
+            att = Attachment(path)
+            main, sub = att.mime_type()
+            self.assertEqual(main, "text")
+        finally:
+            os.unlink(path)
+
+    def test_mime_type_unknown(self):
+        with tempfile.NamedTemporaryFile(suffix=".xyzunknown", delete=False) as f:
+            path = f.name
+        try:
+            att = Attachment(path)
+            main, sub = att.mime_type()
+            self.assertEqual(main, "application")
+            self.assertEqual(sub, "octet-stream")
+        finally:
+            os.unlink(path)
+
+
+class TestEmailMessage(unittest.TestCase):
+    def _basic(self):
+        return (
+            EmailMessage()
+            .from_addr("sender@example.com")
+            .to("alice@example.com")
+            .subject("Test")
+            .text("Hello")
+        )
+
+    def test_text_only_mime_type(self):
+        mime = self._basic().build()
+        self.assertEqual(mime.get_content_type(), "text/plain")
+
+    def test_html_only_mime_type(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("c@d.com")
+            .subject("Hi")
+            .html("<b>Bold</b>")
+            .build()
+        )
+        self.assertEqual(mime.get_content_type(), "text/html")
+
+    def test_text_and_html_mime_type(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("c@d.com")
+            .subject("Hi")
+            .text("plain")
+            .html("<p>html</p>")
+            .build()
+        )
+        self.assertEqual(mime.get_content_type(), "multipart/alternative")
+
+    def test_from_addr_in_headers(self):
+        mime = self._basic().build()
+        self.assertEqual(mime["From"], "sender@example.com")
+
+    def test_from_addr_with_name(self):
+        mime = (
+            EmailMessage()
+            .from_addr("sender@example.com", "Alice")
+            .to("b@b.com")
+            .subject("s")
+            .text("t")
+            .build()
+        )
+        self.assertIn("Alice", mime["From"])
+        self.assertIn("sender@example.com", mime["From"])
+
+    def test_to_in_headers(self):
+        mime = self._basic().build()
+        self.assertIn("alice@example.com", mime["To"])
+
+    def test_multiple_to(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("x@x.com", "y@y.com")
+            .subject("s")
+            .text("t")
+            .build()
+        )
+        self.assertIn("x@x.com", mime["To"])
+        self.assertIn("y@y.com", mime["To"])
+
+    def test_cc_in_headers(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("x@x.com")
+            .cc("cc@cc.com")
+            .subject("s")
+            .text("t")
+            .build()
+        )
+        self.assertIn("cc@cc.com", mime["Cc"])
+
+    def test_reply_to_in_headers(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("b@b.com")
+            .reply_to("noreply@example.com")
+            .subject("s")
+            .text("t")
+            .build()
+        )
+        self.assertEqual(mime["Reply-To"], "noreply@example.com")
+
+    def test_subject_in_headers(self):
+        mime = self._basic().build()
+        self.assertEqual(mime["Subject"], "Test")
+
+    def test_custom_header(self):
+        mime = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("b@b.com")
+            .subject("s")
+            .text("t")
+            .header("X-Priority", "1")
+            .build()
+        )
+        self.assertEqual(mime["X-Priority"], "1")
+
+    def test_message_id_present(self):
+        mime = self._basic().build()
+        self.assertIsNotNone(mime["Message-ID"])
+
+    def test_date_present(self):
+        mime = self._basic().build()
+        self.assertIsNotNone(mime["Date"])
+
+    def test_all_recipients(self):
+        msg = (
+            EmailMessage()
+            .from_addr("a@b.com")
+            .to("to@to.com")
+            .cc("cc@cc.com")
+            .bcc("bcc@bcc.com")
+            .subject("s")
+            .text("t")
+        )
+        recipients = msg.all_recipients()
+        self.assertIn("to@to.com", recipients)
+        self.assertIn("cc@cc.com", recipients)
+        self.assertIn("bcc@bcc.com", recipients)
+
+    def test_empty_message_builds(self):
+        mime = EmailMessage().build()
+        self.assertEqual(mime.get_content_type(), "text/plain")
+
+    def test_builder_chaining(self):
+        msg = EmailMessage()
+        result = msg.from_addr("a@b.com")
+        self.assertIs(result, msg)
+
+    def test_with_file_attachment(self):
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"attachment content")
+            path = f.name
+        try:
+            mime = (
+                EmailMessage()
+                .from_addr("a@b.com")
+                .to("b@b.com")
+                .subject("s")
+                .text("body")
+                .attach(path)
+                .build()
+            )
+            self.assertEqual(mime.get_content_type(), "multipart/mixed")
+        finally:
+            os.unlink(path)
+
+
+class TestSmtpClient(unittest.TestCase):
+    def test_repr_not_connected(self):
+        client = SmtpClient("smtp.example.com", 587)
+        r = repr(client)
+        self.assertIn("smtp.example.com", r)
+        self.assertIn("587", r)
+        self.assertIn("False", r)
+
+    def test_send_without_connect_raises(self):
+        client = SmtpClient("smtp.example.com")
+        msg = EmailMessage().from_addr("a@b.com").to("b@b.com").subject("s").text("t")
+        with self.assertRaises(SmtpError):
+            client.send(msg)
+
+    def test_send_raw_without_connect_raises(self):
+        client = SmtpClient("smtp.example.com")
+        with self.assertRaises(SmtpError):
+            client.send_raw("a@b.com", ["b@b.com"], "raw mime")
+
+    def test_context_manager_connect_fail(self):
+        client = SmtpClient("localhost", 19999, use_tls=False)
+        with self.assertRaises((SmtpError, OSError, ConnectionRefusedError)):
+            with client:
+                pass
+
+    def test_disconnect_when_not_connected(self):
+        client = SmtpClient("smtp.example.com")
+        client.disconnect()
+
+    def test_send_with_mock(self):
+        from unittest.mock import MagicMock, patch
+        mock_conn = MagicMock()
+        client = SmtpClient("smtp.example.com")
+        client._conn = mock_conn
+        msg = EmailMessage().from_addr("a@b.com").to("b@b.com").subject("s").text("t")
+        client.send(msg)
+        mock_conn.sendmail.assert_called_once()
+
+    def test_send_raw_with_mock(self):
+        from unittest.mock import MagicMock
+        mock_conn = MagicMock()
+        client = SmtpClient("smtp.example.com")
+        client._conn = mock_conn
+        client.send_raw("a@b.com", ["b@b.com"], "raw string")
+        mock_conn.sendmail.assert_called_once_with("a@b.com", ["b@b.com"], "raw string")
+
+
+class TestMessageFactory(unittest.TestCase):
+    def test_returns_email_message(self):
+        self.assertIsInstance(message(), EmailMessage)
+
+    def test_factory_builds(self):
+        mime = message().from_addr("a@b.com").to("b@b.com").subject("s").text("t").build()
+        self.assertEqual(mime.get_content_type(), "text/plain")
 
 
 if __name__ == "__main__":
