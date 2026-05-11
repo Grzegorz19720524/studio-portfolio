@@ -165,6 +165,12 @@ from util.regex_utils import (
     extract, extract_all, named_groups, replace, replace_fn,
     split, escape, compile, strip_html, normalize_whitespace,
 )
+from util.functional_utils import (
+    identity, always, pipe as fn_pipe, compose as fn_compose,
+    partial, curry, flip, tap, complement, juxt,
+    memoize as fn_memoize, reduce, scan, take, drop,
+    partition, group_by, zip_with, unique, flatten_iter, iterate,
+)
 
 __all__ = [
     "get_logger",
@@ -552,4 +558,25 @@ __all__ = [
     "compile",
     "strip_html",
     "normalize_whitespace",
+    "identity",
+    "always",
+    "fn_pipe",
+    "fn_compose",
+    "partial",
+    "curry",
+    "flip",
+    "tap",
+    "complement",
+    "juxt",
+    "fn_memoize",
+    "reduce",
+    "scan",
+    "take",
+    "drop",
+    "partition",
+    "group_by",
+    "zip_with",
+    "unique",
+    "flatten_iter",
+    "iterate",
 ]
