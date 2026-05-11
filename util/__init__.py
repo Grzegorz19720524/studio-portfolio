@@ -22,6 +22,7 @@ from util.string_utils import (
     capitalize_words, remove_whitespace, count_words,
     reverse, is_palindrome, pad_left, pad_right,
 )
+from util.cache_utils import Cache
 
 __all__ = [
     "get_logger",
@@ -84,4 +85,5 @@ __all__ = [
     "is_palindrome",
     "pad_left",
     "pad_right",
+    "Cache",
 ]
