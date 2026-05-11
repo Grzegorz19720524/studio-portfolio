@@ -236,6 +236,11 @@ from util.logging_utils import (
     clear_handlers, list_loggers,
     LogCapture, BoundLogger, bind,
 )
+from util.metrics_utils import (
+    Counter, Gauge, Histogram, Summary, Timer, MetricsRegistry,
+    counter, gauge, histogram, summary, timer as metrics_timer,
+    report, reset_all, snapshot,
+)
 
 __all__ = [
     "get_logger",
@@ -789,4 +794,18 @@ __all__ = [
     "LogCapture",
     "BoundLogger",
     "bind",
+    "Counter",
+    "Gauge",
+    "Histogram",
+    "Summary",
+    "Timer",
+    "MetricsRegistry",
+    "counter",
+    "gauge",
+    "histogram",
+    "summary",
+    "metrics_timer",
+    "report",
+    "reset_all",
+    "snapshot",
 ]
