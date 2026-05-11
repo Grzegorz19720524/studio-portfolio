@@ -53,6 +53,7 @@ from util.context_utils import (
     redirect_stdout, chdir, ManagedResource,
 )
 from util.pipeline_utils import Pipeline, AsyncPipeline, compose, branch
+from util.plugin_utils import Plugin, PluginRegistry
 
 __all__ = [
     "get_logger",
@@ -182,4 +183,6 @@ __all__ = [
     "AsyncPipeline",
     "compose",
     "branch",
+    "Plugin",
+    "PluginRegistry",
 ]
