@@ -254,6 +254,12 @@ from util.circuit_breaker_utils import (
     State as CircuitState, CircuitBreakerOpen, CircuitBreaker,
     CircuitBreakerRegistry, circuit_breaker,
 )
+from util.http_client_utils import (
+    HttpError, Response, HttpClient,
+    get as hc_get, post as hc_post, put as hc_put,
+    patch, delete as hc_delete, head,
+    build_url, encode_params, parse_url as hc_parse_url,
+)
 
 __all__ = [
     "get_logger",
@@ -850,4 +856,16 @@ __all__ = [
     "CircuitBreaker",
     "CircuitBreakerRegistry",
     "circuit_breaker",
+    "HttpError",
+    "Response",
+    "HttpClient",
+    "hc_get",
+    "hc_post",
+    "hc_put",
+    "patch",
+    "hc_delete",
+    "head",
+    "build_url",
+    "encode_params",
+    "hc_parse_url",
 ]
