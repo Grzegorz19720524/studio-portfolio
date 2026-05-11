@@ -45,6 +45,7 @@ from util.serializer_utils import (
     JSONEncoder, to_json, from_json,
     to_csv, from_csv, to_flat, from_flat, pick, omit,
 )
+from util.observer_utils import Observable, ObservableValue
 
 __all__ = [
     "get_logger",
@@ -153,4 +154,6 @@ __all__ = [
     "from_flat",
     "pick",
     "omit",
+    "Observable",
+    "ObservableValue",
 ]
