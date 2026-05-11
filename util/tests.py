@@ -18,6 +18,27 @@ from util.crypto_utils import (hash_md5, hash_sha256, hash_sha512, hash_password
                                 hmac_sign, hmac_verify, encode_base64, decode_base64, xor_encrypt, xor_decrypt)
 from util.file_utils import (read_text, write_text, read_json, write_json, file_exists,
                               ensure_dir, delete_file, copy_file, list_files)
+from util.env_utils import get_env, require_env, get_bool, get_int, get_float, get_list, is_production, is_development
+from util.retry_utils import retry, with_fallback
+from util.token_utils import (generate_token, generate_urlsafe_token, generate_uuid,
+                               generate_short_id, create_signed_token, verify_signed_token, hash_token)
+from util.pagination_utils import Page, paginate, page_range
+from util.search_utils import filter_by, search_by_key, sort_by, fuzzy_match, highlight, multi_search
+from util.serializer_utils import to_json, from_json, to_csv, from_csv, to_flat, from_flat, pick, omit
+from util.compression_utils import (zlib_compress, zlib_decompress, gzip_compress, gzip_decompress,
+                                     bz2_compress, bz2_decompress, lzma_compress, lzma_decompress,
+                                     compression_ratio)
+from util.diff_utils import (diff_ratio, is_similar, added_lines, removed_lines,
+                              common_lines, dict_diff, lcs, close_matches)
+from util.geo_utils import (haversine, distance_miles, is_valid_lat, is_valid_lon, is_valid_coords,
+                             bbox, point_in_bbox, km_to_miles, miles_to_km, decimal_to_dms, dms_to_decimal)
+from util.sort_utils import (is_sorted, bubble_sort, selection_sort, insertion_sort, merge_sort,
+                              quick_sort, heap_sort, counting_sort, binary_search)
+from util.graph_utils import (Graph, bfs, dfs, shortest_path, dijkstra, has_cycle, is_connected,
+                               topological_sort)
+from util.validation_utils import (ValidationError, ValidationResult, validate, validate_type,
+                                    validate_range, validate_length, validate_pattern,
+                                    validate_choices, validate_required, Validator)
 
 
 class TestHelpers(unittest.TestCase):
@@ -561,6 +582,606 @@ class TestFileUtils(unittest.TestCase):
             write_text(self._path(name), "")
         files = list_files(self.tmp, "*.txt")
         self.assertEqual(len(files), 3)
+
+
+class TestEnvUtils(unittest.TestCase):
+    def setUp(self):
+        os.environ["_TEST_STR"] = "hello"
+        os.environ["_TEST_BOOL_TRUE"] = "true"
+        os.environ["_TEST_BOOL_FALSE"] = "false"
+        os.environ["_TEST_INT"] = "42"
+        os.environ["_TEST_FLOAT"] = "3.14"
+        os.environ["_TEST_LIST"] = "a, b, c"
+
+    def tearDown(self):
+        for key in ("_TEST_STR", "_TEST_BOOL_TRUE", "_TEST_BOOL_FALSE",
+                    "_TEST_INT", "_TEST_FLOAT", "_TEST_LIST", "APP_ENV"):
+            os.environ.pop(key, None)
+
+    def test_get_env_existing(self):
+        self.assertEqual(get_env("_TEST_STR"), "hello")
+
+    def test_get_env_missing_default(self):
+        self.assertEqual(get_env("_MISSING_XYZ", "fallback"), "fallback")
+
+    def test_require_env_exists(self):
+        self.assertEqual(require_env("_TEST_STR"), "hello")
+
+    def test_require_env_missing_raises(self):
+        with self.assertRaises(KeyError):
+            require_env("_MISSING_XYZ")
+
+    def test_get_bool_true(self):
+        self.assertTrue(get_bool("_TEST_BOOL_TRUE"))
+
+    def test_get_bool_false(self):
+        self.assertFalse(get_bool("_TEST_BOOL_FALSE"))
+
+    def test_get_bool_missing_default(self):
+        self.assertFalse(get_bool("_MISSING_XYZ", False))
+
+    def test_get_int(self):
+        self.assertEqual(get_int("_TEST_INT"), 42)
+
+    def test_get_int_missing(self):
+        self.assertEqual(get_int("_MISSING_XYZ", 99), 99)
+
+    def test_get_float(self):
+        self.assertAlmostEqual(get_float("_TEST_FLOAT"), 3.14)
+
+    def test_get_list(self):
+        self.assertEqual(get_list("_TEST_LIST"), ["a", "b", "c"])
+
+    def test_get_list_missing(self):
+        self.assertEqual(get_list("_MISSING_XYZ"), [])
+
+    def test_is_production_true(self):
+        os.environ["APP_ENV"] = "production"
+        self.assertTrue(is_production())
+
+    def test_is_production_false(self):
+        os.environ["APP_ENV"] = "development"
+        self.assertFalse(is_production())
+
+    def test_is_development_true(self):
+        os.environ["APP_ENV"] = "development"
+        self.assertTrue(is_development())
+
+
+class TestRetryUtils(unittest.TestCase):
+    def test_retry_succeeds_first_try(self):
+        result = retry(lambda: "ok", attempts=3, delay=0)
+        self.assertEqual(result, "ok")
+
+    def test_retry_succeeds_after_failures(self):
+        calls = []
+
+        def flaky():
+            calls.append(1)
+            if len(calls) < 3:
+                raise ValueError("fail")
+            return "done"
+
+        result = retry(flaky, attempts=3, delay=0)
+        self.assertEqual(result, "done")
+        self.assertEqual(len(calls), 3)
+
+    def test_retry_raises_after_all_attempts(self):
+        with self.assertRaises(ValueError):
+            retry(lambda: (_ for _ in ()).throw(ValueError("always")),
+                  attempts=3, delay=0, exceptions=(ValueError,))
+
+    def test_with_fallback_success(self):
+        self.assertEqual(with_fallback(lambda: 42, "fallback"), 42)
+
+    def test_with_fallback_on_error(self):
+        def boom():
+            raise RuntimeError("oops")
+        self.assertEqual(with_fallback(boom, "fallback"), "fallback")
+
+
+class TestTokenUtils(unittest.TestCase):
+    def test_generate_token_length(self):
+        token = generate_token(16)
+        self.assertEqual(len(token), 32)  # hex → 2 chars per byte
+
+    def test_generate_token_unique(self):
+        self.assertNotEqual(generate_token(), generate_token())
+
+    def test_generate_urlsafe_token(self):
+        token = generate_urlsafe_token(16)
+        self.assertIsInstance(token, str)
+        self.assertGreater(len(token), 0)
+
+    def test_generate_uuid_format(self):
+        uid = generate_uuid()
+        self.assertRegex(uid, r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+    def test_generate_short_id_length(self):
+        self.assertEqual(len(generate_short_id(8)), 8)
+        self.assertEqual(len(generate_short_id(12)), 12)
+
+    def test_hash_token(self):
+        h = hash_token("my-token")
+        self.assertEqual(len(h), 64)
+        self.assertEqual(h, hash_token("my-token"))
+
+    def test_create_and_verify_signed_token(self):
+        payload = {"user_id": 1, "role": "admin"}
+        token = create_signed_token(payload, "secret")
+        result = verify_signed_token(token, "secret")
+        self.assertEqual(result["user_id"], 1)
+
+    def test_verify_signed_token_wrong_secret(self):
+        token = create_signed_token({"x": 1}, "secret")
+        self.assertIsNone(verify_signed_token(token, "wrong"))
+
+    def test_verify_signed_token_expired(self):
+        token = create_signed_token({"x": 1}, "secret", expires_in=-1)
+        self.assertIsNone(verify_signed_token(token, "secret"))
+
+    def test_verify_signed_token_tampered(self):
+        token = create_signed_token({"x": 1}, "secret")
+        tampered = token[:-4] + "xxxx"
+        self.assertIsNone(verify_signed_token(tampered, "secret"))
+
+
+class TestPaginationUtils(unittest.TestCase):
+    def setUp(self):
+        self.data = list(range(1, 48))  # 47 items
+
+    def test_paginate_first_page(self):
+        p = paginate(self.data, page=1, page_size=10)
+        self.assertEqual(p.items, list(range(1, 11)))
+        self.assertEqual(p.total, 47)
+        self.assertEqual(p.total_pages, 5)
+
+    def test_paginate_last_page(self):
+        p = paginate(self.data, page=5, page_size=10)
+        self.assertEqual(p.items, list(range(41, 48)))
+
+    def test_page_has_next(self):
+        self.assertTrue(paginate(self.data, 1, 10).has_next)
+        self.assertFalse(paginate(self.data, 5, 10).has_next)
+
+    def test_page_has_prev(self):
+        self.assertFalse(paginate(self.data, 1, 10).has_prev)
+        self.assertTrue(paginate(self.data, 2, 10).has_prev)
+
+    def test_page_next_prev(self):
+        p = paginate(self.data, page=3, page_size=10)
+        self.assertEqual(p.next_page, 4)
+        self.assertEqual(p.prev_page, 2)
+
+    def test_paginate_clamps_page(self):
+        p = paginate(self.data, page=0, page_size=10)
+        self.assertEqual(p.page, 1)
+
+    def test_page_range_basic(self):
+        result = page_range(10, current=5)
+        self.assertIn(5, result)
+        self.assertIn(1, result)
+        self.assertIn(10, result)
+
+    def test_page_range_single(self):
+        self.assertEqual(page_range(1, current=1), [1])
+
+    def test_page_to_dict(self):
+        p = paginate(self.data, 2, 10)
+        d = p.to_dict()
+        self.assertEqual(d["page"], 2)
+        self.assertIn("has_next", d)
+
+
+class TestSearchUtils(unittest.TestCase):
+    def setUp(self):
+        self.items = [
+            {"id": 1, "name": "Laptop Pro", "category": "electronics", "price": 2999},
+            {"id": 2, "name": "Wireless Mouse", "category": "electronics", "price": 149},
+            {"id": 3, "name": "Standing Desk", "category": "furniture", "price": 1200},
+            {"id": 4, "name": "Desk Lamp", "category": "furniture", "price": 89},
+        ]
+
+    def test_filter_by_single(self):
+        result = filter_by(self.items, category="electronics")
+        self.assertEqual(len(result), 2)
+
+    def test_filter_by_multiple(self):
+        result = filter_by(self.items, category="furniture", price=89)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "Desk Lamp")
+
+    def test_search_by_key(self):
+        result = search_by_key(self.items, "name", "desk")
+        self.assertEqual(len(result), 2)
+
+    def test_search_by_key_case_sensitive(self):
+        result = search_by_key(self.items, "name", "Desk", case_sensitive=True)
+        self.assertEqual(len(result), 2)
+        result2 = search_by_key(self.items, "name", "desk", case_sensitive=True)
+        self.assertEqual(len(result2), 0)
+
+    def test_sort_by(self):
+        result = sort_by(self.items, "price")
+        self.assertEqual(result[0]["price"], 89)
+        self.assertEqual(result[-1]["price"], 2999)
+
+    def test_sort_by_reverse(self):
+        result = sort_by(self.items, "price", reverse=True)
+        self.assertEqual(result[0]["price"], 2999)
+
+    def test_fuzzy_match_true(self):
+        self.assertTrue(fuzzy_match("Laptop Pro", "lpt"))
+
+    def test_fuzzy_match_false(self):
+        self.assertFalse(fuzzy_match("Mouse", "lpt"))
+
+    def test_highlight(self):
+        result = highlight("Standing Desk and Desk Lamp", "desk")
+        self.assertIn("**Desk**", result)
+
+    def test_multi_search(self):
+        result = multi_search(self.items, ["name", "category"], "elect")
+        self.assertEqual(len(result), 2)
+
+
+class TestSerializerUtils(unittest.TestCase):
+    def test_to_json_basic(self):
+        self.assertEqual(from_json(to_json({"a": 1})), {"a": 1})
+
+    def test_to_json_date(self):
+        from datetime import date as d
+        result = to_json({"born": d(2023, 3, 14)})
+        self.assertIn("2023-03-14", result)
+
+    def test_to_csv_round_trip(self):
+        records = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+        csv_str = to_csv(records)
+        result = from_csv(csv_str)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "Alice")
+
+    def test_to_csv_empty(self):
+        self.assertEqual(to_csv([]), "")
+
+    def test_to_flat(self):
+        nested = {"a": {"b": {"c": 1}}}
+        self.assertEqual(to_flat(nested), {"a.b.c": 1})
+
+    def test_from_flat(self):
+        flat = {"a.b.c": 1}
+        self.assertEqual(from_flat(flat), {"a": {"b": {"c": 1}}})
+
+    def test_pick(self):
+        d = {"a": 1, "b": 2, "c": 3}
+        self.assertEqual(pick(d, ["a", "c"]), {"a": 1, "c": 3})
+
+    def test_omit(self):
+        d = {"a": 1, "b": 2, "c": 3}
+        self.assertEqual(omit(d, ["b"]), {"a": 1, "c": 3})
+
+
+class TestCompressionUtils(unittest.TestCase):
+    TEXT = "Hello, World! " * 50
+
+    def test_zlib_round_trip(self):
+        self.assertEqual(zlib_decompress(zlib_compress(self.TEXT)), self.TEXT)
+
+    def test_gzip_round_trip(self):
+        self.assertEqual(gzip_decompress(gzip_compress(self.TEXT)), self.TEXT)
+
+    def test_bz2_round_trip(self):
+        self.assertEqual(bz2_decompress(bz2_compress(self.TEXT)), self.TEXT)
+
+    def test_lzma_round_trip(self):
+        self.assertEqual(lzma_decompress(lzma_compress(self.TEXT)), self.TEXT)
+
+    def test_zlib_compresses(self):
+        compressed = zlib_compress(self.TEXT)
+        self.assertLess(len(compressed), len(self.TEXT.encode()))
+
+    def test_compression_ratio(self):
+        compressed = gzip_compress(self.TEXT)
+        ratio = compression_ratio(self.TEXT, compressed)
+        self.assertLess(ratio, 100.0)
+        self.assertGreater(ratio, 0.0)
+
+    def test_zlib_accepts_bytes(self):
+        data = b"binary data"
+        self.assertEqual(zlib_decompress(zlib_compress(data)), "binary data")
+
+
+class TestDiffUtils(unittest.TestCase):
+    def test_diff_ratio_identical(self):
+        self.assertEqual(diff_ratio("hello", "hello"), 1.0)
+
+    def test_diff_ratio_different(self):
+        self.assertLess(diff_ratio("cat", "dog"), 1.0)
+
+    def test_is_similar_true(self):
+        self.assertTrue(is_similar("hello", "helo", 0.7))
+
+    def test_is_similar_false(self):
+        self.assertFalse(is_similar("cat", "dog", 0.9))
+
+    def test_added_lines(self):
+        a = "line1\nline2"
+        b = "line1\nline2\nline3"
+        self.assertEqual(added_lines(a, b), ["line3"])
+
+    def test_removed_lines(self):
+        a = "line1\nline2\nline3"
+        b = "line1\nline2"
+        self.assertEqual(removed_lines(a, b), ["line3"])
+
+    def test_common_lines(self):
+        a = "foo\nbar\nbaz"
+        b = "foo\nbar\nqux"
+        self.assertIn("foo", common_lines(a, b))
+        self.assertIn("bar", common_lines(a, b))
+        self.assertNotIn("baz", common_lines(a, b))
+
+    def test_dict_diff(self):
+        a = {"x": 1, "y": 2, "z": 3}
+        b = {"x": 1, "y": 99, "w": 4}
+        diff = dict_diff(a, b)
+        self.assertIn("w", diff["added"])
+        self.assertIn("z", diff["removed"])
+        self.assertIn("y", diff["changed"])
+
+    def test_lcs(self):
+        self.assertEqual(lcs([1, 2, 3, 4], [2, 4, 6]), [2, 4])
+
+    def test_close_matches(self):
+        result = close_matches("hellp", ["hello", "world", "help"])
+        self.assertIn("hello", result)
+
+
+class TestGeoUtils(unittest.TestCase):
+    # Warsaw and Berlin coordinates
+    WAW = (52.2297, 21.0122)
+    BER = (52.5200, 13.4050)
+
+    def test_haversine_known_distance(self):
+        dist = haversine(*self.WAW, *self.BER)
+        self.assertAlmostEqual(dist, 517, delta=5)
+
+    def test_haversine_same_point(self):
+        self.assertEqual(haversine(*self.WAW, *self.WAW), 0.0)
+
+    def test_distance_miles(self):
+        km = haversine(*self.WAW, *self.BER)
+        mi = distance_miles(*self.WAW, *self.BER)
+        self.assertAlmostEqual(mi, km * 0.621371, delta=1)
+
+    def test_is_valid_lat(self):
+        self.assertTrue(is_valid_lat(52.23))
+        self.assertFalse(is_valid_lat(91.0))
+        self.assertFalse(is_valid_lat(-91.0))
+
+    def test_is_valid_lon(self):
+        self.assertTrue(is_valid_lon(21.01))
+        self.assertFalse(is_valid_lon(181.0))
+
+    def test_is_valid_coords(self):
+        self.assertTrue(is_valid_coords(52.23, 21.01))
+        self.assertFalse(is_valid_coords(91.0, 0.0))
+
+    def test_bbox(self):
+        points = [(50.0, 10.0), (52.0, 20.0), (48.0, 15.0)]
+        min_lat, min_lon, max_lat, max_lon = bbox(points)
+        self.assertEqual(min_lat, 48.0)
+        self.assertEqual(max_lon, 20.0)
+
+    def test_point_in_bbox(self):
+        box = (48.0, 10.0, 54.0, 25.0)
+        self.assertTrue(point_in_bbox(52.23, 21.01, box))
+        self.assertFalse(point_in_bbox(0.0, 0.0, box))
+
+    def test_km_to_miles_round_trip(self):
+        self.assertAlmostEqual(miles_to_km(km_to_miles(100)), 100, delta=0.01)
+
+    def test_decimal_to_dms_round_trip(self):
+        deg, mn, sec = decimal_to_dms(52.2297)
+        result = dms_to_decimal(deg, mn, sec)
+        self.assertAlmostEqual(result, 52.2297, places=3)
+
+
+class TestSortUtils(unittest.TestCase):
+    DATA = [64, 34, 25, 12, 22, 11, 90]
+    SORTED = sorted(DATA)
+
+    def test_is_sorted_true(self):
+        self.assertTrue(is_sorted([1, 2, 3]))
+
+    def test_is_sorted_false(self):
+        self.assertFalse(is_sorted([3, 1, 2]))
+
+    def test_is_sorted_reverse(self):
+        self.assertTrue(is_sorted([3, 2, 1], reverse=True))
+
+    def test_bubble_sort(self):
+        self.assertEqual(bubble_sort(self.DATA), self.SORTED)
+
+    def test_selection_sort(self):
+        self.assertEqual(selection_sort(self.DATA), self.SORTED)
+
+    def test_insertion_sort(self):
+        self.assertEqual(insertion_sort(self.DATA), self.SORTED)
+
+    def test_merge_sort(self):
+        self.assertEqual(merge_sort(self.DATA), self.SORTED)
+
+    def test_quick_sort(self):
+        self.assertEqual(quick_sort(self.DATA), self.SORTED)
+
+    def test_heap_sort(self):
+        self.assertEqual(heap_sort(self.DATA), self.SORTED)
+
+    def test_counting_sort(self):
+        self.assertEqual(counting_sort(self.DATA), self.SORTED)
+
+    def test_binary_search_found(self):
+        self.assertEqual(binary_search(self.SORTED, 25), self.SORTED.index(25))
+
+    def test_binary_search_not_found(self):
+        self.assertEqual(binary_search(self.SORTED, 99), -1)
+
+
+class TestGraphUtils(unittest.TestCase):
+    def _build_graph(self):
+        g = Graph()
+        for u, v in [("A", "B"), ("A", "C"), ("B", "D"), ("C", "D"), ("D", "E")]:
+            g.add_edge(u, v)
+        return g
+
+    def test_add_node_and_edge(self):
+        g = Graph()
+        g.add_edge("X", "Y")
+        self.assertTrue(g.has_node("X"))
+        self.assertTrue(g.has_edge("X", "Y"))
+        self.assertTrue(g.has_edge("Y", "X"))  # undirected
+
+    def test_directed_no_reverse(self):
+        g = Graph(directed=True)
+        g.add_edge("A", "B")
+        self.assertTrue(g.has_edge("A", "B"))
+        self.assertFalse(g.has_edge("B", "A"))
+
+    def test_bfs_visits_all(self):
+        g = self._build_graph()
+        result = bfs(g, "A")
+        self.assertEqual(set(result), {"A", "B", "C", "D", "E"})
+
+    def test_dfs_visits_all(self):
+        g = self._build_graph()
+        result = dfs(g, "A")
+        self.assertEqual(set(result), {"A", "B", "C", "D", "E"})
+
+    def test_shortest_path(self):
+        g = self._build_graph()
+        path = shortest_path(g, "A", "E")
+        self.assertEqual(path[0], "A")
+        self.assertEqual(path[-1], "E")
+
+    def test_shortest_path_no_route(self):
+        g = Graph()
+        g.add_node("X")
+        g.add_node("Y")
+        self.assertIsNone(shortest_path(g, "X", "Y"))
+
+    def test_dijkstra(self):
+        g = Graph()
+        g.add_edge("A", "B", 1)
+        g.add_edge("A", "C", 4)
+        g.add_edge("B", "C", 2)
+        dist = dijkstra(g, "A")
+        self.assertEqual(dist["A"], 0.0)
+        self.assertEqual(dist["B"], 1.0)
+        self.assertEqual(dist["C"], 3.0)
+
+    def test_has_cycle_false(self):
+        g = Graph()
+        g.add_edge("A", "B")
+        g.add_edge("B", "C")
+        self.assertFalse(has_cycle(g))
+
+    def test_has_cycle_true(self):
+        g = Graph()
+        g.add_edge("X", "Y")
+        g.add_edge("Y", "Z")
+        g.add_edge("Z", "X")
+        self.assertTrue(has_cycle(g))
+
+    def test_is_connected_true(self):
+        self.assertTrue(is_connected(self._build_graph()))
+
+    def test_is_connected_false(self):
+        g = Graph()
+        g.add_node("A")
+        g.add_node("B")
+        self.assertFalse(is_connected(g))
+
+    def test_topological_sort(self):
+        dag = Graph(directed=True)
+        for u, v in [("A", "C"), ("B", "C"), ("C", "D")]:
+            dag.add_edge(u, v)
+        order = topological_sort(dag)
+        self.assertLess(order.index("C"), order.index("D"))
+        self.assertLess(order.index("A"), order.index("C"))
+
+
+class TestValidationUtils(unittest.TestCase):
+    def test_validate_valid_data(self):
+        schema = {"name": {"type": str, "min_length": 2}, "age": {"type": int, "min": 0}}
+        result = validate({"name": "Alice", "age": 30}, schema)
+        self.assertTrue(result.is_valid)
+
+    def test_validate_missing_required(self):
+        schema = {"name": {"type": str}}
+        result = validate({}, schema)
+        self.assertFalse(result.is_valid)
+        self.assertIn("name", result.errors)
+
+    def test_validate_wrong_type(self):
+        schema = {"age": {"type": int}}
+        result = validate({"age": "thirty"}, schema)
+        self.assertFalse(result.is_valid)
+
+    def test_validate_out_of_range(self):
+        schema = {"score": {"type": int, "min": 0, "max": 100}}
+        result = validate({"score": 150}, schema)
+        self.assertFalse(result.is_valid)
+
+    def test_validate_choices(self):
+        schema = {"role": {"type": str, "choices": ["admin", "user"]}}
+        self.assertFalse(validate({"role": "superuser"}, schema).is_valid)
+        self.assertTrue(validate({"role": "admin"}, schema).is_valid)
+
+    def test_validate_type(self):
+        self.assertTrue(validate_type(42, int))
+        self.assertFalse(validate_type("x", int))
+
+    def test_validate_range(self):
+        self.assertTrue(validate_range(50, 0, 100))
+        self.assertFalse(validate_range(150, 0, 100))
+
+    def test_validate_length(self):
+        self.assertTrue(validate_length("hello", 3, 10))
+        self.assertFalse(validate_length("hi", 3, 10))
+
+    def test_validate_pattern(self):
+        self.assertTrue(validate_pattern("abc123", r"\w+"))
+        self.assertFalse(validate_pattern("abc 123", r"\w+"))
+
+    def test_validate_choices_fn(self):
+        self.assertTrue(validate_choices("red", ["red", "green", "blue"]))
+        self.assertFalse(validate_choices("yellow", ["red", "green", "blue"]))
+
+    def test_validate_required(self):
+        missing = validate_required({"a": 1, "b": None}, ["a", "b"])
+        self.assertEqual(missing, ["b"])
+
+    def test_validator_chain_valid(self):
+        v = Validator("hello@world.com", "email").required().type(str).min_length(5)
+        self.assertTrue(v.is_valid)
+
+    def test_validator_chain_invalid(self):
+        v = Validator(17, "age").required().type(int).min(18).max(99)
+        self.assertFalse(v.is_valid)
+        self.assertTrue(any("18" in e for e in v.errors))
+
+    def test_validator_raises(self):
+        v = Validator("", "name").required()
+        with self.assertRaises(ValidationError):
+            v.raise_if_invalid()
+
+    def test_validation_result_add_and_raise(self):
+        vr = ValidationResult()
+        vr.add("field", "some error")
+        self.assertFalse(vr.is_valid)
+        with self.assertRaises(ValidationError):
+            vr.raise_if_invalid()
 
 
 if __name__ == "__main__":
