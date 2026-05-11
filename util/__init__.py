@@ -31,6 +31,7 @@ from util.env_utils import (
 from util.event_utils import EventEmitter
 from util.queue_utils import Queue, PriorityQueue
 from util.pool_utils import ObjectPool, PoolContext
+from util.scheduler_utils import Scheduler, Task
 
 __all__ = [
     "get_logger",
@@ -111,4 +112,6 @@ __all__ = [
     "PriorityQueue",
     "ObjectPool",
     "PoolContext",
+    "Scheduler",
+    "Task",
 ]
