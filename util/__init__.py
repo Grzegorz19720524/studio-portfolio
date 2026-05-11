@@ -127,6 +127,11 @@ from util.stack_utils import (
     Stack, is_balanced, evaluate_rpn, infix_to_rpn,
     sort_stack, reverse_stack,
 )
+from util.sort_utils import (
+    is_sorted, bubble_sort, selection_sort, insertion_sort,
+    merge_sort, quick_sort, heap_sort, shell_sort,
+    counting_sort, radix_sort, binary_search,
+)
 
 __all__ = [
     "get_logger",
@@ -418,4 +423,15 @@ __all__ = [
     "infix_to_rpn",
     "sort_stack",
     "reverse_stack",
+    "is_sorted",
+    "bubble_sort",
+    "selection_sort",
+    "insertion_sort",
+    "merge_sort",
+    "quick_sort",
+    "heap_sort",
+    "shell_sort",
+    "counting_sort",
+    "radix_sort",
+    "binary_search",
 ]
