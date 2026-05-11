@@ -192,6 +192,13 @@ from util.csv_utils import (
     count_rows, col_values, select_cols, filter_rows,
     sort_rows, transform_col, rename_col, drop_col, deduplicate,
 )
+from util.xml_utils import (
+    parse_file, parse_string, to_string, write_file,
+    create_element, add_child, remove_child,
+    find, find_all as xml_find_all,
+    get_attr, set_attr, get_text, set_text, get_all_text,
+    element_to_dict, dict_to_element,
+)
 
 __all__ = [
     "get_logger",
@@ -661,4 +668,20 @@ __all__ = [
     "rename_col",
     "drop_col",
     "deduplicate",
+    "parse_file",
+    "parse_string",
+    "to_string",
+    "write_file",
+    "create_element",
+    "add_child",
+    "remove_child",
+    "find",
+    "xml_find_all",
+    "get_attr",
+    "set_attr",
+    "get_text",
+    "set_text",
+    "get_all_text",
+    "element_to_dict",
+    "dict_to_element",
 ]
