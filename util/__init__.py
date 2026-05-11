@@ -186,6 +186,12 @@ from util.statistics_utils import (
     normalize as stat_normalize, standardize, covariance, correlation,
     moving_average, outliers, frequency, describe,
 )
+from util.csv_utils import (
+    read_csv, write_csv, read_csv_rows, write_csv_rows,
+    append_row, csv_to_string, string_to_csv, get_headers,
+    count_rows, col_values, select_cols, filter_rows,
+    sort_rows, transform_col, rename_col, drop_col, deduplicate,
+)
 
 __all__ = [
     "get_logger",
@@ -638,4 +644,21 @@ __all__ = [
     "outliers",
     "frequency",
     "describe",
+    "read_csv",
+    "write_csv",
+    "read_csv_rows",
+    "write_csv_rows",
+    "append_row",
+    "csv_to_string",
+    "string_to_csv",
+    "get_headers",
+    "count_rows",
+    "col_values",
+    "select_cols",
+    "filter_rows",
+    "sort_rows",
+    "transform_col",
+    "rename_col",
+    "drop_col",
+    "deduplicate",
 ]
