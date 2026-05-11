@@ -28,6 +28,7 @@ from util.env_utils import (
     get_env, require_env, get_bool, get_int, get_float,
     get_list, load_dotenv, is_production, is_development,
 )
+from util.event_utils import EventEmitter
 
 __all__ = [
     "get_logger",
@@ -103,4 +104,5 @@ __all__ = [
     "load_dotenv",
     "is_production",
     "is_development",
+    "EventEmitter",
 ]
