@@ -59,6 +59,11 @@ from util.network_utils import (
     get_local_ip, get_hostname, resolve_host, is_port_open,
     is_online, ping, get_free_port, parse_url,
 )
+from util.crypto_utils import (
+    hash_md5, hash_sha256, hash_sha512, generate_salt,
+    hash_password, verify_password, hmac_sign, hmac_verify,
+    encode_base64, decode_base64, xor_encrypt, xor_decrypt,
+)
 
 __all__ = [
     "get_logger",
@@ -201,4 +206,16 @@ __all__ = [
     "ping",
     "get_free_port",
     "parse_url",
+    "hash_md5",
+    "hash_sha256",
+    "hash_sha512",
+    "generate_salt",
+    "hash_password",
+    "verify_password",
+    "hmac_sign",
+    "hmac_verify",
+    "encode_base64",
+    "decode_base64",
+    "xor_encrypt",
+    "xor_decrypt",
 ]
