@@ -42,6 +42,14 @@ from util.validation_utils import (ValidationError, ValidationResult, validate, 
 from util.http_client_utils import (HttpError, Response, HttpClient,
                                      build_url, encode_params, parse_url)
 from util.smtp_utils import (SmtpError, Attachment, EmailMessage, SmtpClient, message)
+import signal as _signal
+from util.websocket_utils import (WebSocketError, WebSocketClosed, Frame,
+                                   WebSocketClient, OP_TEXT, OP_BINARY,
+                                   OP_CLOSE, OP_PING, OP_PONG, _encode_frame)
+from util.signal_utils import (handle, ignore, reset, current_handler,
+                                available_signals, raise_signal,
+                                on_sigint, on_sigterm, register_shutdown,
+                                SignalCounter, GracefulShutdown)
 
 
 class TestHelpers(unittest.TestCase):
@@ -1655,6 +1663,365 @@ class TestMessageFactory(unittest.TestCase):
     def test_factory_builds(self):
         mime = message().from_addr("a@b.com").to("b@b.com").subject("s").text("t").build()
         self.assertEqual(mime.get_content_type(), "text/plain")
+
+
+class TestWebSocketError(unittest.TestCase):
+    def test_is_exception(self):
+        with self.assertRaises(WebSocketError):
+            raise WebSocketError("something went wrong")
+
+    def test_message(self):
+        e = WebSocketError("bad frame")
+        self.assertEqual(str(e), "bad frame")
+
+
+class TestWebSocketClosed(unittest.TestCase):
+    def test_inherits_websocket_error(self):
+        with self.assertRaises(WebSocketError):
+            raise WebSocketClosed(1000, "normal")
+
+    def test_default_code_and_reason(self):
+        e = WebSocketClosed()
+        self.assertEqual(e.code, 1000)
+        self.assertEqual(e.reason, "")
+
+    def test_custom_code_and_reason(self):
+        e = WebSocketClosed(1001, "going away")
+        self.assertEqual(e.code, 1001)
+        self.assertEqual(e.reason, "going away")
+
+    def test_str_contains_code(self):
+        e = WebSocketClosed(1008, "policy violation")
+        self.assertIn("1008", str(e))
+        self.assertIn("policy violation", str(e))
+
+
+class TestFrame(unittest.TestCase):
+    def test_is_text(self):
+        f = Frame(OP_TEXT, b"hello")
+        self.assertTrue(f.is_text)
+        self.assertFalse(f.is_binary)
+        self.assertFalse(f.is_close)
+        self.assertFalse(f.is_ping)
+        self.assertFalse(f.is_pong)
+
+    def test_is_binary(self):
+        f = Frame(OP_BINARY, b"\x00\xFF")
+        self.assertTrue(f.is_binary)
+        self.assertFalse(f.is_text)
+
+    def test_is_close(self):
+        f = Frame(OP_CLOSE, b"")
+        self.assertTrue(f.is_close)
+
+    def test_is_ping(self):
+        f = Frame(OP_PING, b"ping")
+        self.assertTrue(f.is_ping)
+        self.assertFalse(f.is_pong)
+
+    def test_is_pong(self):
+        f = Frame(OP_PONG, b"pong")
+        self.assertTrue(f.is_pong)
+        self.assertFalse(f.is_ping)
+
+    def test_fin_default_true(self):
+        f = Frame(OP_TEXT, b"x")
+        self.assertTrue(f.fin)
+
+    def test_fin_false(self):
+        f = Frame(OP_TEXT, b"x", fin=False)
+        self.assertFalse(f.fin)
+
+    def test_payload_stored(self):
+        f = Frame(OP_BINARY, b"\x01\x02\x03")
+        self.assertEqual(f.payload, b"\x01\x02\x03")
+
+    def test_repr(self):
+        f = Frame(OP_TEXT, b"hello")
+        r = repr(f)
+        self.assertIn("0x1", r)
+        self.assertIn("5", r)
+
+
+class TestEncodeFrame(unittest.TestCase):
+    def test_small_payload_no_mask_length(self):
+        frame = _encode_frame(OP_TEXT, b"hi", mask=False)
+        self.assertEqual(frame[0], 0x80 | OP_TEXT)
+        self.assertEqual(frame[1], 2)
+        self.assertEqual(frame[2:], b"hi")
+
+    def test_opcode_binary_no_mask(self):
+        frame = _encode_frame(OP_BINARY, b"\xFF", mask=False)
+        self.assertEqual(frame[0] & 0x0F, OP_BINARY)
+
+    def test_fin_bit_set(self):
+        frame = _encode_frame(OP_TEXT, b"x", mask=False)
+        self.assertTrue(frame[0] & 0x80)
+
+    def test_medium_payload_126_encoding(self):
+        payload = b"x" * 200
+        frame = _encode_frame(OP_TEXT, payload, mask=False)
+        self.assertEqual(frame[1], 126)
+        import struct
+        length = struct.unpack("!H", frame[2:4])[0]
+        self.assertEqual(length, 200)
+
+    def test_masked_frame_has_mask_bit(self):
+        frame = _encode_frame(OP_TEXT, b"hello", mask=True)
+        self.assertTrue(frame[1] & 0x80)
+
+    def test_masked_frame_longer_than_unmasked(self):
+        unmasked = _encode_frame(OP_TEXT, b"hello", mask=False)
+        masked = _encode_frame(OP_TEXT, b"hello", mask=True)
+        self.assertEqual(len(masked), len(unmasked) + 4)
+
+    def test_empty_payload(self):
+        frame = _encode_frame(OP_PING, b"", mask=False)
+        self.assertEqual(frame[1] & 0x7F, 0)
+
+    def test_close_frame_opcode(self):
+        frame = _encode_frame(OP_CLOSE, b"", mask=False)
+        self.assertEqual(frame[0] & 0x0F, OP_CLOSE)
+
+
+class TestWebSocketClient(unittest.TestCase):
+    def test_repr_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        r = repr(ws)
+        self.assertIn("example.com", r)
+        self.assertIn("False", r)
+
+    def test_is_connected_false_initially(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        self.assertFalse(ws.is_connected)
+
+    def test_callbacks_stored(self):
+        on_msg = lambda m: None
+        on_cls = lambda c, r: None
+        on_err = lambda e: None
+        on_png = lambda d: None
+        ws = WebSocketClient(
+            "ws://example.com/ws",
+            on_message=on_msg,
+            on_close=on_cls,
+            on_error=on_err,
+            on_ping=on_png,
+        )
+        self.assertIs(ws.on_message, on_msg)
+        self.assertIs(ws.on_close, on_cls)
+        self.assertIs(ws.on_error, on_err)
+        self.assertIs(ws.on_ping, on_png)
+
+    def test_extra_headers_stored(self):
+        ws = WebSocketClient("ws://example.com/ws", extra_headers={"X-Auth": "token"})
+        self.assertEqual(ws._extra_headers["X-Auth"], "token")
+
+    def test_extra_headers_default_empty(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        self.assertEqual(ws._extra_headers, {})
+
+    def test_send_raises_when_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        with self.assertRaises(WebSocketClosed):
+            ws.send("hello")
+
+    def test_send_binary_raises_when_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        with self.assertRaises(WebSocketClosed):
+            ws.send_binary(b"\x01\x02")
+
+    def test_ping_raises_when_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        with self.assertRaises(WebSocketClosed):
+            ws.ping()
+
+    def test_pong_raises_when_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        with self.assertRaises(WebSocketClosed):
+            ws.pong()
+
+    def test_recv_raises_when_not_connected(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        with self.assertRaises(WebSocketClosed):
+            ws.recv()
+
+    def test_close_idempotent(self):
+        ws = WebSocketClient("ws://example.com/ws")
+        ws._closed = True
+        ws.close()
+
+    def test_close_calls_on_close_callback(self):
+        called = []
+        ws = WebSocketClient("ws://example.com/ws", on_close=lambda c, r: called.append((c, r)))
+        ws._closed = False
+        ws.close(1001, "bye")
+        self.assertEqual(called, [(1001, "bye")])
+
+    def test_url_stored(self):
+        ws = WebSocketClient("wss://secure.example.com/chat")
+        self.assertEqual(ws.url, "wss://secure.example.com/chat")
+
+    def test_connect_fails_on_unreachable_host(self):
+        ws = WebSocketClient("ws://localhost:19998/ws", timeout=1.0)
+        with self.assertRaises(Exception):
+            ws.connect()
+
+
+class TestSignalHandle(unittest.TestCase):
+    def setUp(self):
+        self._original = _signal.getsignal(_signal.SIGINT)
+
+    def tearDown(self):
+        _signal.signal(_signal.SIGINT, self._original)
+
+    def test_handle_installs_handler(self):
+        received = []
+        handle(_signal.SIGINT, lambda s, f: received.append(s))
+        raise_signal(_signal.SIGINT)
+        self.assertEqual(received, [_signal.SIGINT])
+
+    def test_handle_returns_old_handler(self):
+        original = _signal.getsignal(_signal.SIGINT)
+        old = handle(_signal.SIGINT, _signal.SIG_IGN)
+        self.assertIs(old, original)
+
+    def test_ignore_installs_sig_ign(self):
+        ignore(_signal.SIGINT)
+        self.assertIs(current_handler(_signal.SIGINT), _signal.SIG_IGN)
+
+    def test_reset_installs_sig_dfl(self):
+        ignore(_signal.SIGINT)
+        reset(_signal.SIGINT)
+        self.assertIs(current_handler(_signal.SIGINT), _signal.SIG_DFL)
+
+    def test_current_handler_returns_handler(self):
+        fn = lambda s, f: None
+        handle(_signal.SIGINT, fn)
+        self.assertIs(current_handler(_signal.SIGINT), fn)
+
+    def test_raise_signal_triggers_handler(self):
+        fired = []
+        handle(_signal.SIGINT, lambda s, f: fired.append(True))
+        raise_signal(_signal.SIGINT)
+        self.assertTrue(fired)
+
+    def test_on_sigint_installs_handler(self):
+        called = []
+        on_sigint(lambda: called.append(1))
+        raise_signal(_signal.SIGINT)
+        self.assertEqual(called, [1])
+
+    def test_on_sigterm_installs_handler(self):
+        original_term = _signal.getsignal(_signal.SIGTERM)
+        called = []
+        try:
+            on_sigterm(lambda: called.append(1))
+            raise_signal(_signal.SIGTERM)
+            self.assertEqual(called, [1])
+        finally:
+            _signal.signal(_signal.SIGTERM, original_term)
+
+    def test_register_shutdown_handles_sigint(self):
+        original_term = _signal.getsignal(_signal.SIGTERM)
+        called = []
+        try:
+            register_shutdown(lambda: called.append("shutdown"))
+            raise_signal(_signal.SIGINT)
+            self.assertIn("shutdown", called)
+        finally:
+            _signal.signal(_signal.SIGTERM, original_term)
+
+
+class TestAvailableSignals(unittest.TestCase):
+    def test_returns_dict(self):
+        sigs = available_signals()
+        self.assertIsInstance(sigs, dict)
+
+    def test_contains_sigint(self):
+        sigs = available_signals()
+        self.assertIn("SIGINT", sigs)
+        self.assertEqual(sigs["SIGINT"], _signal.SIGINT)
+
+    def test_values_are_ints(self):
+        for name, num in available_signals().items():
+            self.assertIsInstance(num, int)
+
+    def test_no_sig_underscore_prefix(self):
+        for name in available_signals():
+            self.assertFalse(name.startswith("SIG_"))
+
+
+class TestSignalCounter(unittest.TestCase):
+    def setUp(self):
+        self._original = _signal.getsignal(_signal.SIGINT)
+
+    def tearDown(self):
+        _signal.signal(_signal.SIGINT, self._original)
+
+    def test_initial_count_zero(self):
+        counter = SignalCounter(_signal.SIGINT)
+        self.assertEqual(counter.count, 0)
+
+    def test_count_increments_on_signal(self):
+        counter = SignalCounter(_signal.SIGINT)
+        raise_signal(_signal.SIGINT)
+        raise_signal(_signal.SIGINT)
+        self.assertEqual(counter.count, 2)
+
+    def test_reset_count(self):
+        counter = SignalCounter(_signal.SIGINT)
+        raise_signal(_signal.SIGINT)
+        counter.reset_count()
+        self.assertEqual(counter.count, 0)
+
+    def test_sig_stored(self):
+        counter = SignalCounter(_signal.SIGINT)
+        self.assertEqual(counter.sig, _signal.SIGINT)
+
+
+class TestGracefulShutdown(unittest.TestCase):
+    def setUp(self):
+        self._orig_int = _signal.getsignal(_signal.SIGINT)
+        self._orig_term = _signal.getsignal(_signal.SIGTERM)
+
+    def tearDown(self):
+        _signal.signal(_signal.SIGINT, self._orig_int)
+        _signal.signal(_signal.SIGTERM, self._orig_term)
+
+    def test_not_shutdown_initially(self):
+        gs = GracefulShutdown()
+        self.assertFalse(gs.is_shutdown)
+
+    def test_is_shutdown_after_sigint(self):
+        gs = GracefulShutdown()
+        raise_signal(_signal.SIGINT)
+        self.assertTrue(gs.is_shutdown)
+
+    def test_on_shutdown_callback_called(self):
+        called = []
+        gs = GracefulShutdown()
+        gs.on_shutdown(lambda: called.append(True))
+        raise_signal(_signal.SIGINT)
+        self.assertTrue(called)
+
+    def test_multiple_callbacks(self):
+        results = []
+        gs = GracefulShutdown()
+        gs.on_shutdown(lambda: results.append(1))
+        gs.on_shutdown(lambda: results.append(2))
+        raise_signal(_signal.SIGINT)
+        self.assertEqual(sorted(results), [1, 2])
+
+    def test_wait_returns_true_when_shutdown(self):
+        gs = GracefulShutdown()
+        raise_signal(_signal.SIGINT)
+        result = gs.wait(timeout=0.1)
+        self.assertTrue(result)
+
+    def test_wait_returns_false_when_not_shutdown(self):
+        gs = GracefulShutdown()
+        result = gs.wait(timeout=0.05)
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":
