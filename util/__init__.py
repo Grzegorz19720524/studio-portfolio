@@ -199,6 +199,14 @@ from util.xml_utils import (
     get_attr, set_attr, get_text, set_text, get_all_text,
     element_to_dict, dict_to_element,
 )
+from util.ini_utils import (
+    read_ini, write_ini,
+    parse_string as ini_parse_string, to_string as ini_to_string,
+    get as ini_get, get_int as ini_get_int,
+    get_float as ini_get_float, get_bool as ini_get_bool,
+    set_value, has_section, has_key, sections, keys, items,
+    to_dict, from_dict, remove_section, remove_key, merge,
+)
 
 __all__ = [
     "get_logger",
@@ -684,4 +692,23 @@ __all__ = [
     "get_all_text",
     "element_to_dict",
     "dict_to_element",
+    "read_ini",
+    "write_ini",
+    "ini_parse_string",
+    "ini_to_string",
+    "ini_get",
+    "ini_get_int",
+    "ini_get_float",
+    "ini_get_bool",
+    "set_value",
+    "has_section",
+    "has_key",
+    "sections",
+    "keys",
+    "items",
+    "to_dict",
+    "from_dict",
+    "remove_section",
+    "remove_key",
+    "merge",
 ]
