@@ -41,6 +41,10 @@ from util.search_utils import (
     filter_by, search_by_key, sort_by,
     fuzzy_match, fuzzy_search, highlight, multi_search,
 )
+from util.serializer_utils import (
+    JSONEncoder, to_json, from_json,
+    to_csv, from_csv, to_flat, from_flat, pick, omit,
+)
 
 __all__ = [
     "get_logger",
@@ -140,4 +144,13 @@ __all__ = [
     "fuzzy_search",
     "highlight",
     "multi_search",
+    "JSONEncoder",
+    "to_json",
+    "from_json",
+    "to_csv",
+    "from_csv",
+    "to_flat",
+    "from_flat",
+    "pick",
+    "omit",
 ]
