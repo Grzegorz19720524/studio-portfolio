@@ -214,6 +214,11 @@ from util.toml_utils import (
     has_key as toml_has_key, merge as toml_merge,
     flatten_keys, keys_at,
 )
+from util.yaml_utils import (
+    read_yaml, write_yaml,
+    parse_string as yaml_parse_string, to_string as yaml_to_string,
+    get as yaml_get, set_value as yaml_set_value, merge as yaml_merge,
+)
 
 __all__ = [
     "get_logger",
@@ -728,4 +733,11 @@ __all__ = [
     "toml_merge",
     "flatten_keys",
     "keys_at",
+    "read_yaml",
+    "write_yaml",
+    "yaml_parse_string",
+    "yaml_to_string",
+    "yaml_get",
+    "yaml_set_value",
+    "yaml_merge",
 ]
