@@ -37,6 +37,10 @@ from util.token_utils import (
     generate_short_id, create_signed_token, verify_signed_token, hash_token,
 )
 from util.pagination_utils import Page, paginate, page_range
+from util.search_utils import (
+    filter_by, search_by_key, sort_by,
+    fuzzy_match, fuzzy_search, highlight, multi_search,
+)
 
 __all__ = [
     "get_logger",
@@ -129,4 +133,11 @@ __all__ = [
     "Page",
     "paginate",
     "page_range",
+    "filter_by",
+    "search_by_key",
+    "sort_by",
+    "fuzzy_match",
+    "fuzzy_search",
+    "highlight",
+    "multi_search",
 ]
