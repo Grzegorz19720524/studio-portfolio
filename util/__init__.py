@@ -12,6 +12,7 @@ from util.date_utils import (
     days_between, add_days, is_past, is_future,
     start_of_week, end_of_week,
 )
+from util.http_utils import get, post, put, delete, is_ok
 
 __all__ = [
     "get_logger",
@@ -49,4 +50,9 @@ __all__ = [
     "is_future",
     "start_of_week",
     "end_of_week",
+    "get",
+    "post",
+    "put",
+    "delete",
+    "is_ok",
 ]
