@@ -13,6 +13,10 @@ from util.date_utils import (
     start_of_week, end_of_week,
 )
 from util.http_utils import get, post, put, delete, is_ok
+from util.math_utils import (
+    clamp, lerp, normalize, mean, median,
+    variance, std_dev, round_to, percentage, is_prime,
+)
 
 __all__ = [
     "get_logger",
@@ -55,4 +59,14 @@ __all__ = [
     "put",
     "delete",
     "is_ok",
+    "clamp",
+    "lerp",
+    "normalize",
+    "mean",
+    "median",
+    "variance",
+    "std_dev",
+    "round_to",
+    "percentage",
+    "is_prime",
 ]
