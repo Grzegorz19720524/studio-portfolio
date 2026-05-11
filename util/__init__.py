@@ -112,6 +112,12 @@ from util.graph_utils import (
     Graph, bfs, dfs, shortest_path, dijkstra,
     has_cycle, is_connected, topological_sort,
 )
+from util.tree_utils import (
+    TreeNode, insert, search, delete as tree_delete,
+    inorder, preorder, postorder, level_order,
+    height, size, min_node, max_node,
+    is_bst, is_balanced, from_list, to_list, pretty_print,
+)
 
 __all__ = [
     "get_logger",
@@ -373,4 +379,21 @@ __all__ = [
     "has_cycle",
     "is_connected",
     "topological_sort",
+    "TreeNode",
+    "insert",
+    "search",
+    "tree_delete",
+    "inorder",
+    "preorder",
+    "postorder",
+    "level_order",
+    "height",
+    "size",
+    "min_node",
+    "max_node",
+    "is_bst",
+    "is_balanced",
+    "from_list",
+    "to_list",
+    "pretty_print",
 ]
