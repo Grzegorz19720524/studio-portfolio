@@ -123,6 +123,10 @@ from util.linked_list_utils import (
     from_list as ll_from_list, has_cycle as ll_has_cycle,
     middle, merge_sorted, remove_duplicates,
 )
+from util.stack_utils import (
+    Stack, is_balanced, evaluate_rpn, infix_to_rpn,
+    sort_stack, reverse_stack,
+)
 
 __all__ = [
     "get_logger",
@@ -408,4 +412,10 @@ __all__ = [
     "middle",
     "merge_sorted",
     "remove_duplicates",
+    "Stack",
+    "is_balanced",
+    "evaluate_rpn",
+    "infix_to_rpn",
+    "sort_stack",
+    "reverse_stack",
 ]
