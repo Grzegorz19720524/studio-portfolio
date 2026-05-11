@@ -171,6 +171,13 @@ from util.functional_utils import (
     memoize as fn_memoize, reduce, scan, take, drop,
     partition, group_by, zip_with, unique, flatten_iter, iterate,
 )
+from util.iterator_utils import (
+    chunks, sliding_window, pairwise, flatten as iter_flatten,
+    deep_flatten, interleave, roundrobin, first, last, nth,
+    count_items, all_equal, minmax, accumulate, zip_longest,
+    product, permutations, combinations,
+    combinations_with_replacement, Peekable,
+)
 
 __all__ = [
     "get_logger",
@@ -579,4 +586,24 @@ __all__ = [
     "unique",
     "flatten_iter",
     "iterate",
+    "chunks",
+    "sliding_window",
+    "pairwise",
+    "iter_flatten",
+    "deep_flatten",
+    "interleave",
+    "roundrobin",
+    "first",
+    "last",
+    "nth",
+    "count_items",
+    "all_equal",
+    "minmax",
+    "accumulate",
+    "zip_longest",
+    "product",
+    "permutations",
+    "combinations",
+    "combinations_with_replacement",
+    "Peekable",
 ]
