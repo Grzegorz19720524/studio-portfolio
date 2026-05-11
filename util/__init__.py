@@ -52,6 +52,7 @@ from util.context_utils import (
     timer as ctx_timer, suppress, temp_dir, temp_env,
     redirect_stdout, chdir, ManagedResource,
 )
+from util.pipeline_utils import Pipeline, AsyncPipeline, compose, branch
 
 __all__ = [
     "get_logger",
@@ -177,4 +178,8 @@ __all__ = [
     "redirect_stdout",
     "chdir",
     "ManagedResource",
+    "Pipeline",
+    "AsyncPipeline",
+    "compose",
+    "branch",
 ]
