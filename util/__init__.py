@@ -46,6 +46,7 @@ from util.serializer_utils import (
     to_csv, from_csv, to_flat, from_flat, pick, omit,
 )
 from util.observer_utils import Observable, ObservableValue
+from util.state_utils import Store, StateMachine
 
 __all__ = [
     "get_logger",
@@ -156,4 +157,6 @@ __all__ = [
     "omit",
     "Observable",
     "ObservableValue",
+    "Store",
+    "StateMachine",
 ]
