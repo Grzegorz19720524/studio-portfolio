@@ -241,6 +241,10 @@ from util.metrics_utils import (
     counter, gauge, histogram, summary, timer as metrics_timer,
     report, reset_all, snapshot,
 )
+from util.ratelimit_utils import (
+    RateLimitExceeded, FixedWindow, SlidingWindow, TokenBucket, LeakyBucket,
+    rate_limit, throttle, debounce, try_acquire, wait_and_acquire,
+)
 
 __all__ = [
     "get_logger",
@@ -808,4 +812,14 @@ __all__ = [
     "report",
     "reset_all",
     "snapshot",
+    "RateLimitExceeded",
+    "FixedWindow",
+    "SlidingWindow",
+    "TokenBucket",
+    "LeakyBucket",
+    "rate_limit",
+    "throttle",
+    "debounce",
+    "try_acquire",
+    "wait_and_acquire",
 ]
