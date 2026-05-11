@@ -108,6 +108,10 @@ from util.matrix_utils import (
     flatten as matrix_flatten, reshape, get_row, get_col,
     map_matrix, print_matrix,
 )
+from util.graph_utils import (
+    Graph, bfs, dfs, shortest_path, dijkstra,
+    has_cycle, is_connected, topological_sort,
+)
 
 __all__ = [
     "get_logger",
@@ -361,4 +365,12 @@ __all__ = [
     "get_col",
     "map_matrix",
     "print_matrix",
+    "Graph",
+    "bfs",
+    "dfs",
+    "shortest_path",
+    "dijkstra",
+    "has_cycle",
+    "is_connected",
+    "topological_sort",
 ]
