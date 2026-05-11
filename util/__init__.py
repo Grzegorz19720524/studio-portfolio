@@ -55,6 +55,10 @@ from util.context_utils import (
 from util.pipeline_utils import Pipeline, AsyncPipeline, compose, branch
 from util.plugin_utils import Plugin, PluginRegistry
 from util.benchmark_utils import measure, compare, print_report
+from util.network_utils import (
+    get_local_ip, get_hostname, resolve_host, is_port_open,
+    is_online, ping, get_free_port, parse_url,
+)
 
 __all__ = [
     "get_logger",
@@ -189,4 +193,12 @@ __all__ = [
     "measure",
     "compare",
     "print_report",
+    "get_local_ip",
+    "get_hostname",
+    "resolve_host",
+    "is_port_open",
+    "is_online",
+    "ping",
+    "get_free_port",
+    "parse_url",
 ]
