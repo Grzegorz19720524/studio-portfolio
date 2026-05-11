@@ -47,6 +47,7 @@ from util.serializer_utils import (
 )
 from util.observer_utils import Observable, ObservableValue
 from util.state_utils import Store, StateMachine
+from util.decorator_utils import timer, memoize, retry as retry_decorator, singleton, deprecated, clamp_result
 
 __all__ = [
     "get_logger",
@@ -159,4 +160,10 @@ __all__ = [
     "ObservableValue",
     "Store",
     "StateMachine",
+    "timer",
+    "memoize",
+    "retry_decorator",
+    "singleton",
+    "deprecated",
+    "clamp_result",
 ]
