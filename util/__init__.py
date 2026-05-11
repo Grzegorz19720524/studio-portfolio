@@ -64,6 +64,13 @@ from util.crypto_utils import (
     hash_password, verify_password, hmac_sign, hmac_verify,
     encode_base64, decode_base64, xor_encrypt, xor_decrypt,
 )
+from util.compression_utils import (
+    zlib_compress, zlib_decompress,
+    gzip_compress, gzip_decompress,
+    bz2_compress, bz2_decompress,
+    lzma_compress, lzma_decompress,
+    compress_file, compression_ratio,
+)
 
 __all__ = [
     "get_logger",
@@ -218,4 +225,14 @@ __all__ = [
     "decode_base64",
     "xor_encrypt",
     "xor_decrypt",
+    "zlib_compress",
+    "zlib_decompress",
+    "gzip_compress",
+    "gzip_decompress",
+    "bz2_compress",
+    "bz2_decompress",
+    "lzma_compress",
+    "lzma_decompress",
+    "compress_file",
+    "compression_ratio",
 ]
