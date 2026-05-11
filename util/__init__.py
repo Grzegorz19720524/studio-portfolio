@@ -219,6 +219,9 @@ from util.yaml_utils import (
     parse_string as yaml_parse_string, to_string as yaml_to_string,
     get as yaml_get, set_value as yaml_set_value, merge as yaml_merge,
 )
+from util.template_utils import (
+    register_filter, escape_html, render, render_safe, render_file, Template,
+)
 
 __all__ = [
     "get_logger",
@@ -740,4 +743,10 @@ __all__ = [
     "yaml_get",
     "yaml_set_value",
     "yaml_merge",
+    "register_filter",
+    "escape_html",
+    "render",
+    "render_safe",
+    "render_file",
+    "Template",
 ]
