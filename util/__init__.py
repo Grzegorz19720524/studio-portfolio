@@ -54,6 +54,7 @@ from util.context_utils import (
 )
 from util.pipeline_utils import Pipeline, AsyncPipeline, compose, branch
 from util.plugin_utils import Plugin, PluginRegistry
+from util.benchmark_utils import measure, compare, print_report
 
 __all__ = [
     "get_logger",
@@ -185,4 +186,7 @@ __all__ = [
     "branch",
     "Plugin",
     "PluginRegistry",
+    "measure",
+    "compare",
+    "print_report",
 ]
