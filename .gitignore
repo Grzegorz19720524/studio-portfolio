@@ -32,3 +32,6 @@ bin/
 ### Claude Code ###
 .mcp.json
 .claude/
+
+### Logs ###
+logs/
