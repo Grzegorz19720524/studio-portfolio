@@ -138,6 +138,12 @@ from util.io_utils import (
     stream_lines, find_files, atomic_write,
     backup, checksum, touch, file_size,
 )
+from util.process_utils import (
+    run as proc_run, run_shell, get_output, run_bg, run_piped,
+    which, command_exists, get_pid, pid_exists, kill,
+    cpu_count, python_version, platform_info,
+    env_var as proc_env_var, set_env_var, all_env_vars,
+)
 
 __all__ = [
     "get_logger",
@@ -456,4 +462,20 @@ __all__ = [
     "checksum",
     "touch",
     "file_size",
+    "proc_run",
+    "run_shell",
+    "get_output",
+    "run_bg",
+    "run_piped",
+    "which",
+    "command_exists",
+    "get_pid",
+    "pid_exists",
+    "kill",
+    "cpu_count",
+    "python_version",
+    "platform_info",
+    "proc_env_var",
+    "set_env_var",
+    "all_env_vars",
 ]
