@@ -71,6 +71,11 @@ from util.compression_utils import (
     lzma_compress, lzma_decompress,
     compress_file, compression_ratio,
 )
+from util.type_utils import (
+    is_type, is_int, is_float, is_numeric, is_string,
+    is_bool, is_list, is_dict, is_none,
+    safe_int, safe_float, safe_bool, safe_cast, coerce, type_name,
+)
 
 __all__ = [
     "get_logger",
@@ -235,4 +240,19 @@ __all__ = [
     "lzma_decompress",
     "compress_file",
     "compression_ratio",
+    "is_type",
+    "is_int",
+    "is_float",
+    "is_numeric",
+    "is_string",
+    "is_bool",
+    "is_list",
+    "is_dict",
+    "is_none",
+    "safe_int",
+    "safe_float",
+    "safe_bool",
+    "safe_cast",
+    "coerce",
+    "type_name",
 ]
