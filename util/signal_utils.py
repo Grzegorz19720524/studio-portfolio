@@ -1,5 +1,4 @@
 import os
-import sys
 import signal
 import threading
 from typing import Callable, Any

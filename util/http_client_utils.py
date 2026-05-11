@@ -7,7 +7,6 @@ import base64
 import gzip
 import zlib
 from typing import Any
-from http.client import HTTPResponse
 
 
 class HttpError(Exception):

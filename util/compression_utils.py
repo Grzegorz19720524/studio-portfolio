@@ -2,7 +2,6 @@ import zlib
 import gzip
 import bz2
 import lzma
-import base64
 from pathlib import Path
 
 
