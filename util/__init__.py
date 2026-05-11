@@ -90,6 +90,12 @@ from util.diff_utils import (
     added_lines, removed_lines, common_lines,
     dict_diff, lcs, close_matches,
 )
+from util.geo_utils import (
+    haversine, distance_miles, bearing, midpoint,
+    is_valid_lat, is_valid_lon, is_valid_coords,
+    bbox, point_in_bbox, km_to_miles, miles_to_km,
+    decimal_to_dms, dms_to_decimal,
+)
 
 __all__ = [
     "get_logger",
@@ -296,4 +302,17 @@ __all__ = [
     "dict_diff",
     "lcs",
     "close_matches",
+    "haversine",
+    "distance_miles",
+    "bearing",
+    "midpoint",
+    "is_valid_lat",
+    "is_valid_lon",
+    "is_valid_coords",
+    "bbox",
+    "point_in_bbox",
+    "km_to_miles",
+    "miles_to_km",
+    "decimal_to_dms",
+    "dms_to_decimal",
 ]
