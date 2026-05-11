@@ -96,6 +96,12 @@ from util.geo_utils import (
     bbox, point_in_bbox, km_to_miles, miles_to_km,
     decimal_to_dms, dms_to_decimal,
 )
+from util.color_utils import (
+    hex_to_rgb, rgb_to_hex, rgb_to_hsl, hsl_to_rgb,
+    rgb_to_hsv, hsv_to_rgb, luminance, is_light,
+    contrast_color, lighten, darken, mix,
+    complementary, random_color, analogous, triadic,
+)
 
 __all__ = [
     "get_logger",
@@ -315,4 +321,20 @@ __all__ = [
     "miles_to_km",
     "decimal_to_dms",
     "dms_to_decimal",
+    "hex_to_rgb",
+    "rgb_to_hex",
+    "rgb_to_hsl",
+    "hsl_to_rgb",
+    "rgb_to_hsv",
+    "hsv_to_rgb",
+    "luminance",
+    "is_light",
+    "contrast_color",
+    "lighten",
+    "darken",
+    "mix",
+    "complementary",
+    "random_color",
+    "analogous",
+    "triadic",
 ]
