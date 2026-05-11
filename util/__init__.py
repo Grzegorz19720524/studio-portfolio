@@ -245,6 +245,11 @@ from util.ratelimit_utils import (
     RateLimitExceeded, FixedWindow, SlidingWindow, TokenBucket, LeakyBucket,
     rate_limit, throttle, debounce, try_acquire, wait_and_acquire,
 )
+from util.event_bus_utils import (
+    Event, EventBus,
+    subscribe, unsubscribe, once, publish, emit,
+    publish_async, on, use, clear, listeners, listener_count, wait_for,
+)
 
 __all__ = [
     "get_logger",
@@ -822,4 +827,18 @@ __all__ = [
     "debounce",
     "try_acquire",
     "wait_and_acquire",
+    "Event",
+    "EventBus",
+    "subscribe",
+    "unsubscribe",
+    "once",
+    "publish",
+    "emit",
+    "publish_async",
+    "on",
+    "use",
+    "clear",
+    "listeners",
+    "listener_count",
+    "wait_for",
 ]
