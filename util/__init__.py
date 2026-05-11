@@ -7,6 +7,11 @@ from util.file_utils import (
     read_text, write_text, read_json, write_json,
     file_exists, ensure_dir, delete_file, copy_file, list_files,
 )
+from util.date_utils import (
+    now, today, parse_date, format_date,
+    days_between, add_days, is_past, is_future,
+    start_of_week, end_of_week,
+)
 
 __all__ = [
     "get_logger",
@@ -34,4 +39,14 @@ __all__ = [
     "delete_file",
     "copy_file",
     "list_files",
+    "now",
+    "today",
+    "parse_date",
+    "format_date",
+    "days_between",
+    "add_days",
+    "is_past",
+    "is_future",
+    "start_of_week",
+    "end_of_week",
 ]
