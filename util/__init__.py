@@ -178,6 +178,14 @@ from util.iterator_utils import (
     product, permutations, combinations,
     combinations_with_replacement, Peekable,
 )
+from util.statistics_utils import (
+    mean as stat_mean, median as stat_median, mode, multimode,
+    variance as stat_variance, stdev, pvariance, pstdev,
+    harmonic_mean, geometric_mean, weighted_mean,
+    quantile, quartiles, iqr, z_score, z_scores,
+    normalize as stat_normalize, standardize, covariance, correlation,
+    moving_average, outliers, frequency, describe,
+)
 
 __all__ = [
     "get_logger",
@@ -606,4 +614,28 @@ __all__ = [
     "combinations",
     "combinations_with_replacement",
     "Peekable",
+    "stat_mean",
+    "stat_median",
+    "mode",
+    "multimode",
+    "stat_variance",
+    "stdev",
+    "pvariance",
+    "pstdev",
+    "harmonic_mean",
+    "geometric_mean",
+    "weighted_mean",
+    "quantile",
+    "quartiles",
+    "iqr",
+    "z_score",
+    "z_scores",
+    "stat_normalize",
+    "standardize",
+    "covariance",
+    "correlation",
+    "moving_average",
+    "outliers",
+    "frequency",
+    "describe",
 ]
