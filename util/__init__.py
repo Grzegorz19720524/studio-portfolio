@@ -260,6 +260,11 @@ from util.http_client_utils import (
     patch, delete as hc_delete, head,
     build_url, encode_params, parse_url as hc_parse_url,
 )
+from util.websocket_utils import (
+    WebSocketError, WebSocketClosed, Frame, WebSocketClient,
+    connect as ws_connect,
+    OP_TEXT, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG, OP_CONTINUATION,
+)
 
 __all__ = [
     "get_logger",
@@ -868,4 +873,15 @@ __all__ = [
     "build_url",
     "encode_params",
     "hc_parse_url",
+    "WebSocketError",
+    "WebSocketClosed",
+    "Frame",
+    "WebSocketClient",
+    "ws_connect",
+    "OP_TEXT",
+    "OP_BINARY",
+    "OP_CLOSE",
+    "OP_PING",
+    "OP_PONG",
+    "OP_CONTINUATION",
 ]
