@@ -85,6 +85,11 @@ from util.format_utils import (
     format_duration, format_ordinal, format_list, format_table,
     indent, wrap,
 )
+from util.diff_utils import (
+    diff_ratio, is_similar, unified_diff, ndiff,
+    added_lines, removed_lines, common_lines,
+    dict_diff, lcs, close_matches,
+)
 
 __all__ = [
     "get_logger",
@@ -281,4 +286,14 @@ __all__ = [
     "format_table",
     "indent",
     "wrap",
+    "diff_ratio",
+    "is_similar",
+    "unified_diff",
+    "ndiff",
+    "added_lines",
+    "removed_lines",
+    "common_lines",
+    "dict_diff",
+    "lcs",
+    "close_matches",
 ]
