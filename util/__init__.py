@@ -144,6 +144,12 @@ from util.process_utils import (
     cpu_count, python_version, platform_info,
     env_var as proc_env_var, set_env_var, all_env_vars,
 )
+from util.signal_utils import (
+    handle, ignore, reset, send, raise_signal,
+    on_sigint, on_sigterm, register_shutdown,
+    current_handler, available_signals,
+    SignalCounter, GracefulShutdown,
+)
 
 __all__ = [
     "get_logger",
@@ -478,4 +484,16 @@ __all__ = [
     "proc_env_var",
     "set_env_var",
     "all_env_vars",
+    "handle",
+    "ignore",
+    "reset",
+    "send",
+    "raise_signal",
+    "on_sigint",
+    "on_sigterm",
+    "register_shutdown",
+    "current_handler",
+    "available_signals",
+    "SignalCounter",
+    "GracefulShutdown",
 ]
