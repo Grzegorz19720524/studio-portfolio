@@ -228,6 +228,14 @@ from util.validation_utils import (
     validate_pattern, validate_choices, validate_required,
     Validator,
 )
+from util.logging_utils import (
+    JsonFormatter, make_logger, get_logger as logging_get_logger,
+    add_console_handler, add_file_handler, add_rotating_handler,
+    set_level, silence, enable,
+    get_level_name, parse_level,
+    clear_handlers, list_loggers,
+    LogCapture, BoundLogger, bind,
+)
 
 __all__ = [
     "get_logger",
@@ -765,4 +773,20 @@ __all__ = [
     "validate_choices",
     "validate_required",
     "Validator",
+    "JsonFormatter",
+    "make_logger",
+    "logging_get_logger",
+    "add_console_handler",
+    "add_file_handler",
+    "add_rotating_handler",
+    "set_level",
+    "silence",
+    "enable",
+    "get_level_name",
+    "parse_level",
+    "clear_handlers",
+    "list_loggers",
+    "LogCapture",
+    "BoundLogger",
+    "bind",
 ]
