@@ -102,6 +102,12 @@ from util.color_utils import (
     contrast_color, lighten, darken, mix,
     complementary, random_color, analogous, triadic,
 )
+from util.matrix_utils import (
+    zeros, ones, identity, shape, is_square, transpose,
+    add, subtract, scalar_multiply, multiply, trace, determinant,
+    flatten as matrix_flatten, reshape, get_row, get_col,
+    map_matrix, print_matrix,
+)
 
 __all__ = [
     "get_logger",
@@ -337,4 +343,22 @@ __all__ = [
     "random_color",
     "analogous",
     "triadic",
+    "zeros",
+    "ones",
+    "identity",
+    "shape",
+    "is_square",
+    "transpose",
+    "add",
+    "subtract",
+    "scalar_multiply",
+    "multiply",
+    "trace",
+    "determinant",
+    "matrix_flatten",
+    "reshape",
+    "get_row",
+    "get_col",
+    "map_matrix",
+    "print_matrix",
 ]
