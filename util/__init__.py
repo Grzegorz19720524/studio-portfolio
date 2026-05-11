@@ -118,6 +118,11 @@ from util.tree_utils import (
     height, size, min_node, max_node,
     is_bst, is_balanced, from_list, to_list, pretty_print,
 )
+from util.linked_list_utils import (
+    Node, LinkedList,
+    from_list as ll_from_list, has_cycle as ll_has_cycle,
+    middle, merge_sorted, remove_duplicates,
+)
 
 __all__ = [
     "get_logger",
@@ -396,4 +401,11 @@ __all__ = [
     "from_list",
     "to_list",
     "pretty_print",
+    "Node",
+    "LinkedList",
+    "ll_from_list",
+    "ll_has_cycle",
+    "middle",
+    "merge_sorted",
+    "remove_duplicates",
 ]
