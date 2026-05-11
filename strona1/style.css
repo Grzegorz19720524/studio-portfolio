@@ -378,10 +378,10 @@ body {
   font-size: 1.5rem;
   margin-bottom: 20px;
 }
-.icon-blue  { background: rgba(0,240,255,0.15); box-shadow: 0 0 12px rgba(0,240,255,0.2); }
-.icon-white { background: rgba(255,255,255,0.2); }
-.icon-purple{ background: rgba(255,0,229,0.15); box-shadow: 0 0 12px rgba(255,0,229,0.2); }
-.icon-green { background: rgba(57,255,20,0.15);  box-shadow: 0 0 12px rgba(57,255,20,0.2); }
+.icon-blue   { background: rgba(0,240,255,0.15); box-shadow: 0 0 12px rgba(0,240,255,0.2); }
+.icon-white  { background: rgba(255,255,255,0.2); }
+.icon-purple { background: rgba(255,0,229,0.15); box-shadow: 0 0 12px rgba(255,0,229,0.2); }
+.icon-green  { background: rgba(57,255,20,0.15); box-shadow: 0 0 12px rgba(57,255,20,0.2); }
 
 .feature-card h3 {
   font-size: 1.1rem;
@@ -661,8 +661,8 @@ body {
   font-size: 0.9rem;
   color: var(--text);
 }
-.pricing-feature--off {
-  color: var(--text-muted) !important;
+.pricing-features li.pricing-feature--off {
+  color: var(--text-muted);
   opacity: 0.5;
 }
 
@@ -886,6 +886,8 @@ body {
   transition: color 0.2s;
 }
 .footer-links a:hover { color: var(--text); }
+
+.footer .nav-brand { color: #fff; }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
