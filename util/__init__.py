@@ -132,6 +132,12 @@ from util.sort_utils import (
     merge_sort, quick_sort, heap_sort, shell_sort,
     counting_sort, radix_sort, binary_search,
 )
+from util.io_utils import (
+    read_lines, write_lines, read_bytes, write_bytes,
+    append_text, head, tail, count_lines, grep,
+    stream_lines, find_files, atomic_write,
+    backup, checksum, touch, file_size,
+)
 
 __all__ = [
     "get_logger",
@@ -434,4 +440,20 @@ __all__ = [
     "counting_sort",
     "radix_sort",
     "binary_search",
+    "read_lines",
+    "write_lines",
+    "read_bytes",
+    "write_bytes",
+    "append_text",
+    "head",
+    "tail",
+    "count_lines",
+    "grep",
+    "stream_lines",
+    "find_files",
+    "atomic_write",
+    "backup",
+    "checksum",
+    "touch",
+    "file_size",
 ]
