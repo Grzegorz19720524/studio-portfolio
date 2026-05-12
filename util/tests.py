@@ -2105,6 +2105,33 @@ class TestLogger(unittest.TestCase):
         log = get_logger("test.handler")
         self.assertGreater(len(log.handlers), 0)
 
+    def test_default_level_is_debug(self):
+        log = get_logger("test.default_level")
+        self.assertEqual(log.level, logging.DEBUG)
+
+    def test_file_handler_added(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.log")
+            log = get_logger("test.filehandler", log_file=path)
+            handler_types = [type(h) for h in log.handlers]
+            for h in log.handlers:
+                h.close()
+            log.handlers.clear()
+            self.assertIn(logging.FileHandler, handler_types)
+
+    def test_log_file_created(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "subdir", "app.log")
+            log = get_logger("test.filecreated", log_file=path)
+            log.info("hello")
+            exists = os.path.exists(path)
+            for h in log.handlers:
+                h.close()
+            log.handlers.clear()
+            self.assertTrue(exists)
+
 
 class TestHttpUtils(unittest.TestCase):
     def test_is_ok_200(self):
