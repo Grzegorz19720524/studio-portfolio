@@ -1,7 +1,7 @@
 import time
 import functools
 import warnings
-from typing import Callable, Any
+from typing import Callable
 
 
 def timer(fn: Callable) -> Callable:

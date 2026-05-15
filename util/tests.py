@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import os
-from datetime import date, timedelta
+from datetime import date
 from util.helpers import slugify, truncate, flatten, chunk, timestamp
 from util.validators import is_email, is_url, is_phone, is_non_empty, is_in_range, is_min_length
 from util.config import Config
@@ -22,7 +22,7 @@ from util.env_utils import get_env, require_env, get_bool, get_int, get_float, g
 from util.retry_utils import retry, with_fallback
 from util.token_utils import (generate_token, generate_urlsafe_token, generate_uuid,
                                generate_short_id, create_signed_token, verify_signed_token, hash_token)
-from util.pagination_utils import Page, paginate, page_range
+from util.pagination_utils import paginate, page_range
 from util.search_utils import filter_by, search_by_key, sort_by, fuzzy_match, highlight, multi_search
 from util.serializer_utils import to_json, from_json, to_csv, from_csv, to_flat, from_flat, pick, omit
 from util.compression_utils import (zlib_compress, zlib_decompress, gzip_compress, gzip_decompress,
@@ -42,7 +42,62 @@ from util.validation_utils import (ValidationError, ValidationResult, validate, 
 from util.http_client_utils import (HttpError, Response, HttpClient,
                                      build_url, encode_params, parse_url)
 from util.smtp_utils import (SmtpError, Attachment, EmailMessage, SmtpClient, message)
+import logging
 import signal as _signal
+from util.logger import get_logger
+from util.http_utils import is_ok
+from util.event_utils import EventEmitter
+from util.queue_utils import Queue, PriorityQueue
+from util.decorator_utils import (memoize as deco_memoize, retry as deco_retry,
+                                   singleton, deprecated, clamp_result)
+from util.observer_utils import Observable, ObservableValue
+from util.state_utils import Store, StateMachine
+from util.color_utils import (hex_to_rgb, rgb_to_hex, rgb_to_hsl, hsl_to_rgb,
+                               luminance, is_light, contrast_color,
+                               lighten, darken, mix, complementary, random_color,
+                               analogous, triadic)
+from util.matrix_utils import (zeros, ones, identity as mat_identity, shape,
+                                is_square, transpose, add as mat_add,
+                                subtract as mat_sub, scalar_multiply,
+                                multiply as mat_mul, trace, determinant,
+                                flatten as mat_flatten, reshape,
+                                get_row, get_col, map_matrix)
+from util.tree_utils import (TreeNode, search as tree_search, delete as tree_delete,
+                              inorder, preorder, postorder, level_order,
+                              height, size as tree_size, min_node, max_node,
+                              is_bst, is_balanced as tree_balanced,
+                              from_list as tree_from_list, to_list as tree_to_list)
+from util.linked_list_utils import (LinkedList, from_list as ll_from_list,
+                                     has_cycle as ll_has_cycle, middle,
+                                     merge_sorted, remove_duplicates)
+from util.stack_utils import (Stack, is_balanced as stack_balanced,
+                               evaluate_rpn, infix_to_rpn,
+                               sort_stack, reverse_stack)
+from util.functional_utils import (identity as fn_id, always, pipe as fn_pipe,
+                                    compose as fn_compose,
+                                    curry, flip, tap, complement, juxt,
+                                    memoize as fn_memoize,
+                                    reduce as fn_reduce, scan, take, drop,
+                                    partition, group_by, zip_with,
+                                    unique, flatten_iter)
+from util.regex_utils import (is_match, find_all, extract, replace as re_replace,
+                               split as re_split, named_groups,
+                               strip_html, normalize_whitespace, escape,
+                               EMAIL_PATTERN, DATE_PATTERN, HEX_COLOR_PATTERN)
+from util.statistics_utils import (mean as stat_mean, median as stat_median,
+                                    mode, variance as stat_var, stdev,
+                                    harmonic_mean, geometric_mean, weighted_mean,
+                                    quantile, quartiles, iqr, z_score,
+                                    normalize as stat_normalize, covariance,
+                                    correlation, moving_average, outliers,
+                                    frequency, describe)
+from util.ratelimit_utils import (RateLimitExceeded, FixedWindow, SlidingWindow,
+                                   TokenBucket, LeakyBucket, try_acquire)
+from util.circuit_breaker_utils import (CircuitBreaker, CircuitBreakerOpen,
+                                         CircuitBreakerRegistry, State)
+from util.event_bus_utils import Event, EventBus
+from util.pipeline_utils import Pipeline, compose as pipe_compose, branch
+from util.context_utils import suppress, temp_dir, temp_env, ManagedResource
 from util.websocket_utils import (WebSocketError, WebSocketClosed, Frame,
                                    WebSocketClient, OP_TEXT, OP_BINARY,
                                    OP_CLOSE, OP_PING, OP_PONG, _encode_frame)
@@ -1639,7 +1694,7 @@ class TestSmtpClient(unittest.TestCase):
         client.disconnect()
 
     def test_send_with_mock(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
         mock_conn = MagicMock()
         client = SmtpClient("smtp.example.com")
         client._conn = mock_conn
@@ -1796,10 +1851,10 @@ class TestWebSocketClient(unittest.TestCase):
         self.assertFalse(ws.is_connected)
 
     def test_callbacks_stored(self):
-        on_msg = lambda m: None
-        on_cls = lambda c, r: None
-        on_err = lambda e: None
-        on_png = lambda d: None
+        def on_msg(m): pass
+        def on_cls(c, r): pass
+        def on_err(e): pass
+        def on_png(d): pass
         ws = WebSocketClient(
             "ws://example.com/ws",
             on_message=on_msg,
@@ -1895,7 +1950,7 @@ class TestSignalHandle(unittest.TestCase):
         self.assertIs(current_handler(_signal.SIGINT), _signal.SIG_DFL)
 
     def test_current_handler_returns_handler(self):
-        fn = lambda s, f: None
+        def fn(s, f): pass
         handle(_signal.SIGINT, fn)
         self.assertIs(current_handler(_signal.SIGINT), fn)
 
@@ -2022,6 +2077,1405 @@ class TestGracefulShutdown(unittest.TestCase):
         gs = GracefulShutdown()
         result = gs.wait(timeout=0.05)
         self.assertFalse(result)
+
+
+class TestLogger(unittest.TestCase):
+    def test_returns_logger(self):
+        log = get_logger("test.logger")
+        self.assertIsInstance(log, logging.Logger)
+
+    def test_name_matches(self):
+        log = get_logger("test.myapp")
+        self.assertEqual(log.name, "test.myapp")
+
+    def test_level_set(self):
+        log = get_logger("test.level", level=logging.WARNING)
+        self.assertEqual(log.level, logging.WARNING)
+
+    def test_no_duplicate_handlers(self):
+        get_logger("test.dedup")
+        count_first = len(logging.getLogger("test.dedup").handlers)
+        get_logger("test.dedup")
+        count_second = len(logging.getLogger("test.dedup").handlers)
+        self.assertEqual(count_first, count_second)
+
+    def test_has_handler(self):
+        log = get_logger("test.handler")
+        self.assertGreater(len(log.handlers), 0)
+
+    def test_default_level_is_debug(self):
+        log = get_logger("test.default_level")
+        self.assertEqual(log.level, logging.DEBUG)
+
+    def test_file_handler_added(self):
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.log")
+            log = get_logger("test.filehandler", log_file=path)
+            handler_types = [type(h) for h in log.handlers]
+            for h in log.handlers:
+                h.close()
+            log.handlers.clear()
+            self.assertIn(logging.FileHandler, handler_types)
+
+    def test_log_file_created(self):
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "subdir", "app.log")
+            log = get_logger("test.filecreated", log_file=path)
+            log.info("hello")
+            exists = os.path.exists(path)
+            for h in log.handlers:
+                h.close()
+            log.handlers.clear()
+            self.assertTrue(exists)
+
+
+class TestHttpUtils(unittest.TestCase):
+    def test_is_ok_200(self):
+        self.assertTrue(is_ok({"status": 200}))
+
+    def test_is_ok_201(self):
+        self.assertTrue(is_ok({"status": 201}))
+
+    def test_is_ok_299(self):
+        self.assertTrue(is_ok({"status": 299}))
+
+    def test_is_ok_400(self):
+        self.assertFalse(is_ok({"status": 400}))
+
+    def test_is_ok_404(self):
+        self.assertFalse(is_ok({"status": 404}))
+
+    def test_is_ok_500(self):
+        self.assertFalse(is_ok({"status": 500}))
+
+    def test_is_ok_none_status(self):
+        self.assertFalse(is_ok({"status": None}))
+
+    def test_is_ok_missing_status(self):
+        self.assertFalse(is_ok({}))
+
+
+class TestEventEmitter(unittest.TestCase):
+    def setUp(self):
+        self.emitter = EventEmitter()
+
+    def test_on_and_emit(self):
+        received = []
+        self.emitter.on("data", lambda x: received.append(x))
+        self.emitter.emit("data", 42)
+        self.assertEqual(received, [42])
+
+    def test_emit_returns_count(self):
+        self.emitter.on("x", lambda: None)
+        self.emitter.on("x", lambda: None)
+        self.assertEqual(self.emitter.emit("x"), 2)
+
+    def test_once_fires_once(self):
+        received = []
+        self.emitter.once("ping", lambda: received.append(1))
+        self.emitter.emit("ping")
+        self.emitter.emit("ping")
+        self.assertEqual(received, [1])
+
+    def test_off_removes_listener(self):
+        def fn(x): pass
+        self.emitter.on("evt", fn)
+        removed = self.emitter.off("evt", fn)
+        self.assertTrue(removed)
+        self.assertEqual(self.emitter.emit("evt", 1), 0)
+
+    def test_off_not_registered(self):
+        self.assertFalse(self.emitter.off("missing", lambda: None))
+
+    def test_no_listeners_emit_returns_zero(self):
+        self.assertEqual(self.emitter.emit("nothing"), 0)
+
+    def test_listeners_includes_on_and_once(self):
+        def f1(): pass
+        def f2(): pass
+        self.emitter.on("e", f1)
+        self.emitter.once("e", f2)
+        self.assertIn(f1, self.emitter.listeners("e"))
+        self.assertIn(f2, self.emitter.listeners("e"))
+
+    def test_clear_specific_event(self):
+        self.emitter.on("a", lambda: None)
+        self.emitter.on("b", lambda: None)
+        self.emitter.clear("a")
+        self.assertEqual(self.emitter.emit("a"), 0)
+        self.assertEqual(self.emitter.emit("b"), 1)
+
+    def test_clear_all(self):
+        self.emitter.on("a", lambda: None)
+        self.emitter.on("b", lambda: None)
+        self.emitter.clear()
+        self.assertEqual(self.emitter.emit("a"), 0)
+        self.assertEqual(self.emitter.emit("b"), 0)
+
+    def test_repr(self):
+        self.emitter.on("login", lambda: None)
+        self.assertIn("EventEmitter", repr(self.emitter))
+
+
+class TestQueue(unittest.TestCase):
+    def test_enqueue_dequeue(self):
+        q = Queue()
+        q.enqueue("a")
+        self.assertEqual(q.dequeue(), "a")
+
+    def test_fifo_order(self):
+        q = Queue()
+        for v in [1, 2, 3]:
+            q.enqueue(v)
+        self.assertEqual([q.dequeue() for _ in range(3)], [1, 2, 3])
+
+    def test_peek(self):
+        q = Queue()
+        q.enqueue("x")
+        self.assertEqual(q.peek(), "x")
+        self.assertEqual(q.size(), 1)
+
+    def test_is_empty(self):
+        q = Queue()
+        self.assertTrue(q.is_empty())
+        q.enqueue(1)
+        self.assertFalse(q.is_empty())
+
+    def test_maxsize_rejects(self):
+        q = Queue(maxsize=2)
+        q.enqueue(1)
+        q.enqueue(2)
+        self.assertFalse(q.enqueue(3))
+        self.assertTrue(q.is_full())
+
+    def test_clear(self):
+        q = Queue()
+        q.enqueue(1)
+        q.clear()
+        self.assertTrue(q.is_empty())
+
+    def test_dequeue_empty_raises(self):
+        with self.assertRaises(IndexError):
+            Queue().dequeue()
+
+    def test_peek_empty_raises(self):
+        with self.assertRaises(IndexError):
+            Queue().peek()
+
+    def test_repr(self):
+        q = Queue(maxsize=5)
+        self.assertIn("Queue", repr(q))
+
+
+class TestPriorityQueue(unittest.TestCase):
+    def test_push_pop_order(self):
+        pq = PriorityQueue()
+        pq.push("low", priority=10)
+        pq.push("high", priority=1)
+        pq.push("mid", priority=5)
+        self.assertEqual(pq.pop(), "high")
+        self.assertEqual(pq.pop(), "mid")
+        self.assertEqual(pq.pop(), "low")
+
+    def test_peek(self):
+        pq = PriorityQueue()
+        pq.push("only", priority=3)
+        self.assertEqual(pq.peek(), "only")
+        self.assertEqual(pq.size(), 1)
+
+    def test_is_empty(self):
+        pq = PriorityQueue()
+        self.assertTrue(pq.is_empty())
+        pq.push("x")
+        self.assertFalse(pq.is_empty())
+
+    def test_pop_empty_raises(self):
+        with self.assertRaises(IndexError):
+            PriorityQueue().pop()
+
+    def test_repr(self):
+        pq = PriorityQueue()
+        pq.push("a")
+        self.assertIn("PriorityQueue", repr(pq))
+
+
+class TestDecoratorUtils(unittest.TestCase):
+    def test_memoize_caches(self):
+        calls = []
+        @deco_memoize
+        def fn(x):
+            calls.append(x)
+            return x * 2
+        fn(5)
+        fn(5)
+        self.assertEqual(len(calls), 1)
+
+    def test_memoize_different_args(self):
+        @deco_memoize
+        def fn(x):
+            return x + 1
+        self.assertEqual(fn(1), 2)
+        self.assertEqual(fn(2), 3)
+
+    def test_retry_succeeds(self):
+        @deco_retry(attempts=3)
+        def ok():
+            return "done"
+        self.assertEqual(ok(), "done")
+
+    def test_retry_exhausted_raises(self):
+        @deco_retry(attempts=2, exceptions=(ValueError,))
+        def always_fail():
+            raise ValueError("oops")
+        with self.assertRaises(ValueError):
+            always_fail()
+
+    def test_retry_succeeds_after_failure(self):
+        state = {"count": 0}
+        @deco_retry(attempts=3, exceptions=(RuntimeError,))
+        def flaky():
+            state["count"] += 1
+            if state["count"] < 3:
+                raise RuntimeError("not yet")
+            return "ok"
+        self.assertEqual(flaky(), "ok")
+
+    def test_singleton_same_instance(self):
+        @singleton
+        class MyService:
+            pass
+        self.assertIs(MyService(), MyService())
+
+    def test_deprecated_raises_warning(self):
+        import warnings
+        @deprecated("Use new_func instead.")
+        def old():
+            return 1
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = old()
+        self.assertEqual(result, 1)
+        self.assertTrue(any(issubclass(x.category, DeprecationWarning) for x in w))
+
+    def test_clamp_result(self):
+        @clamp_result(0, 100)
+        def score(x):
+            return x * 10
+        self.assertEqual(score(15), 100)
+        self.assertEqual(score(-5), 0)
+        self.assertEqual(score(5), 50)
+
+
+class TestObservable(unittest.TestCase):
+    def test_subscribe_and_notify(self):
+        obs = Observable()
+        received = []
+        obs.subscribe(lambda x: received.append(x))
+        obs.notify("event")
+        self.assertEqual(received, ["event"])
+
+    def test_subscribe_no_duplicates(self):
+        obs = Observable()
+        def fn(): pass
+        obs.subscribe(fn)
+        obs.subscribe(fn)
+        self.assertEqual(obs.observer_count(), 1)
+
+    def test_unsubscribe(self):
+        obs = Observable()
+        def fn(x): pass
+        obs.subscribe(fn)
+        removed = obs.unsubscribe(fn)
+        self.assertTrue(removed)
+        self.assertEqual(obs.observer_count(), 0)
+
+    def test_unsubscribe_not_subscribed(self):
+        self.assertFalse(Observable().unsubscribe(lambda: None))
+
+    def test_repr(self):
+        obs = Observable()
+        self.assertIn("Observable", repr(obs))
+
+
+class TestObservableValue(unittest.TestCase):
+    def test_initial_value(self):
+        ov = ObservableValue(42)
+        self.assertEqual(ov.value, 42)
+
+    def test_setter_notifies(self):
+        changes = []
+        ov = ObservableValue(0)
+        ov.subscribe(lambda new, old: changes.append((new, old)))
+        ov.value = 5
+        self.assertEqual(changes, [(5, 0)])
+
+    def test_no_notify_when_same(self):
+        changes = []
+        ov = ObservableValue(10)
+        ov.subscribe(lambda n, o: changes.append(1))
+        ov.value = 10
+        self.assertEqual(changes, [])
+
+    def test_unsubscribe(self):
+        def fn(n, o): pass
+        ov = ObservableValue(0)
+        ov.subscribe(fn)
+        self.assertTrue(ov.unsubscribe(fn))
+
+    def test_repr(self):
+        ov = ObservableValue("hello")
+        self.assertIn("hello", repr(ov))
+
+
+class TestStore(unittest.TestCase):
+    def setUp(self):
+        self.store = Store({"x": 1, "y": 2})
+
+    def test_get(self):
+        self.assertEqual(self.store.get("x"), 1)
+
+    def test_get_default(self):
+        self.assertIsNone(self.store.get("missing"))
+        self.assertEqual(self.store.get("missing", 99), 99)
+
+    def test_set_updates_state(self):
+        self.store.set("x", 10)
+        self.assertEqual(self.store.get("x"), 10)
+
+    def test_update(self):
+        self.store.update({"x": 5, "z": 3})
+        self.assertEqual(self.store.get("x"), 5)
+        self.assertEqual(self.store.get("z"), 3)
+
+    def test_reset_restores_initial(self):
+        self.store.set("x", 99)
+        self.store.reset()
+        self.assertEqual(self.store.get("x"), 1)
+
+    def test_undo(self):
+        self.store.set("x", 42)
+        self.store.undo()
+        self.assertEqual(self.store.get("x"), 1)
+
+    def test_undo_at_initial_returns_false(self):
+        self.assertFalse(self.store.undo())
+
+    def test_subscribe_notified_on_set(self):
+        events = []
+        self.store.subscribe(lambda s: events.append(s))
+        self.store.set("x", 7)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["x"], 7)
+
+    def test_state_property(self):
+        s = self.store.state
+        self.assertIsInstance(s, dict)
+        self.assertEqual(s["x"], 1)
+
+    def test_repr(self):
+        self.assertIn("Store", repr(self.store))
+
+
+class TestStateMachine(unittest.TestCase):
+    def setUp(self):
+        self.sm = StateMachine(
+            "idle",
+            {"idle": ["running"], "running": ["stopped"], "stopped": []}
+        )
+
+    def test_initial_state(self):
+        self.assertEqual(self.sm.current, "idle")
+
+    def test_valid_transition(self):
+        self.assertTrue(self.sm.transition("running"))
+        self.assertEqual(self.sm.current, "running")
+
+    def test_invalid_transition(self):
+        self.assertFalse(self.sm.transition("stopped"))
+        self.assertEqual(self.sm.current, "idle")
+
+    def test_can(self):
+        self.assertTrue(self.sm.can("running"))
+        self.assertFalse(self.sm.can("stopped"))
+
+    def test_on_enter_callback(self):
+        entered = []
+        self.sm.on_enter("running", lambda s: entered.append(s))
+        self.sm.transition("running")
+        self.assertEqual(entered, ["running"])
+
+    def test_on_exit_callback(self):
+        exited = []
+        self.sm.on_exit("idle", lambda s: exited.append(s))
+        self.sm.transition("running")
+        self.assertEqual(exited, ["idle"])
+
+    def test_repr(self):
+        self.assertIn("idle", repr(self.sm))
+
+
+class TestColorUtils(unittest.TestCase):
+    def test_hex_to_rgb(self):
+        self.assertEqual(hex_to_rgb("#ffffff"), (255, 255, 255))
+        self.assertEqual(hex_to_rgb("#000000"), (0, 0, 0))
+
+    def test_hex_to_rgb_shorthand(self):
+        self.assertEqual(hex_to_rgb("#fff"), (255, 255, 255))
+
+    def test_rgb_to_hex(self):
+        self.assertEqual(rgb_to_hex(255, 255, 255), "#ffffff")
+        self.assertEqual(rgb_to_hex(0, 0, 0), "#000000")
+
+    def test_round_trip_hex_rgb(self):
+        original = "#3498db"
+        r, g, b = hex_to_rgb(original)
+        self.assertEqual(rgb_to_hex(r, g, b), original)
+
+    def test_rgb_to_hsl_white(self):
+        h, s, lightness = rgb_to_hsl(255, 255, 255)
+        self.assertAlmostEqual(lightness, 100, places=0)
+
+    def test_hsl_to_rgb_round_trip(self):
+        h, s, lightness = rgb_to_hsl(100, 150, 200)
+        r, g, b = hsl_to_rgb(h, s, lightness)
+        self.assertAlmostEqual(r, 100, delta=2)
+        self.assertAlmostEqual(g, 150, delta=2)
+        self.assertAlmostEqual(b, 200, delta=2)
+
+    def test_luminance_black(self):
+        self.assertAlmostEqual(luminance(0, 0, 0), 0.0)
+
+    def test_luminance_white(self):
+        self.assertAlmostEqual(luminance(255, 255, 255), 1.0, places=3)
+
+    def test_is_light_white(self):
+        self.assertTrue(is_light("#ffffff"))
+
+    def test_is_light_black(self):
+        self.assertFalse(is_light("#000000"))
+
+    def test_contrast_color_light(self):
+        self.assertEqual(contrast_color("#ffffff"), "#000000")
+
+    def test_contrast_color_dark(self):
+        self.assertEqual(contrast_color("#000000"), "#ffffff")
+
+    def test_lighten_increases_lightness(self):
+        result = lighten("#808080", 20)
+        _, _, l_orig = rgb_to_hsl(*hex_to_rgb("#808080"))
+        _, _, l_new = rgb_to_hsl(*hex_to_rgb(result))
+        self.assertGreater(l_new, l_orig)
+
+    def test_darken_decreases_lightness(self):
+        result = darken("#808080", 20)
+        _, _, l_orig = rgb_to_hsl(*hex_to_rgb("#808080"))
+        _, _, l_new = rgb_to_hsl(*hex_to_rgb(result))
+        self.assertLess(l_new, l_orig)
+
+    def test_mix_equal_ratio(self):
+        result = mix("#000000", "#ffffff", 0.5)
+        r, g, b = hex_to_rgb(result)
+        self.assertAlmostEqual(r, 128, delta=1)
+
+    def test_complementary_returns_hex(self):
+        result = complementary("#ff0000")
+        self.assertTrue(result.startswith("#"))
+        self.assertEqual(len(result), 7)
+
+    def test_random_color_format(self):
+        c = random_color()
+        self.assertTrue(c.startswith("#"))
+        self.assertEqual(len(c), 7)
+
+    def test_analogous_returns_two(self):
+        a, b = analogous("#ff0000")
+        self.assertTrue(a.startswith("#"))
+        self.assertTrue(b.startswith("#"))
+
+    def test_triadic_returns_two(self):
+        a, b = triadic("#ff0000")
+        self.assertTrue(a.startswith("#"))
+        self.assertTrue(b.startswith("#"))
+
+
+class TestMatrixUtils(unittest.TestCase):
+    def test_zeros(self):
+        m = zeros(2, 3)
+        self.assertEqual(m, [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+    def test_ones(self):
+        self.assertEqual(ones(2, 2), [[1.0, 1.0], [1.0, 1.0]])
+
+    def test_identity(self):
+        m = mat_identity(3)
+        self.assertEqual(m[0][0], 1.0)
+        self.assertEqual(m[0][1], 0.0)
+        self.assertEqual(m[1][1], 1.0)
+
+    def test_shape(self):
+        self.assertEqual(shape([[1, 2, 3], [4, 5, 6]]), (2, 3))
+
+    def test_is_square_true(self):
+        self.assertTrue(is_square([[1, 2], [3, 4]]))
+
+    def test_is_square_false(self):
+        self.assertFalse(is_square([[1, 2, 3], [4, 5, 6]]))
+
+    def test_transpose(self):
+        self.assertEqual(transpose([[1, 2], [3, 4]]), [[1, 3], [2, 4]])
+
+    def test_add(self):
+        self.assertEqual(mat_add([[1, 2], [3, 4]], [[5, 6], [7, 8]]),
+                         [[6, 8], [10, 12]])
+
+    def test_subtract(self):
+        self.assertEqual(mat_sub([[5, 6], [7, 8]], [[1, 2], [3, 4]]),
+                         [[4, 4], [4, 4]])
+
+    def test_scalar_multiply(self):
+        self.assertEqual(scalar_multiply([[1, 2], [3, 4]], 2),
+                         [[2, 4], [6, 8]])
+
+    def test_multiply(self):
+        a = [[1, 2], [3, 4]]
+        b = [[5, 6], [7, 8]]
+        result = mat_mul(a, b)
+        self.assertEqual(result[0][0], 19)
+        self.assertEqual(result[1][1], 50)
+
+    def test_multiply_incompatible_raises(self):
+        with self.assertRaises(ValueError):
+            mat_mul([[1, 2, 3]], [[1, 2], [3, 4]])
+
+    def test_trace(self):
+        self.assertEqual(trace([[1, 2], [3, 4]]), 5)
+
+    def test_trace_non_square_raises(self):
+        with self.assertRaises(ValueError):
+            trace([[1, 2, 3], [4, 5, 6]])
+
+    def test_determinant_2x2(self):
+        self.assertAlmostEqual(determinant([[1, 2], [3, 4]]), -2.0)
+
+    def test_determinant_1x1(self):
+        self.assertEqual(determinant([[7]]), 7)
+
+    def test_flatten(self):
+        self.assertEqual(mat_flatten([[1, 2], [3, 4]]), [1, 2, 3, 4])
+
+    def test_reshape(self):
+        self.assertEqual(reshape([1, 2, 3, 4], 2, 2), [[1, 2], [3, 4]])
+
+    def test_reshape_wrong_size_raises(self):
+        with self.assertRaises(ValueError):
+            reshape([1, 2, 3], 2, 2)
+
+    def test_get_row(self):
+        self.assertEqual(get_row([[1, 2], [3, 4]], 1), [3, 4])
+
+    def test_get_col(self):
+        self.assertEqual(get_col([[1, 2], [3, 4]], 0), [1, 3])
+
+    def test_map_matrix(self):
+        self.assertEqual(map_matrix(lambda x: x * 2, [[1, 2], [3, 4]]),
+                         [[2, 4], [6, 8]])
+
+
+class TestTreeUtils(unittest.TestCase):
+    def setUp(self):
+        self.root = tree_from_list([5, 3, 7, 1, 4, 6, 8])
+
+    def test_inorder_sorted(self):
+        self.assertEqual(inorder(self.root), [1, 3, 4, 5, 6, 7, 8])
+
+    def test_preorder_root_first(self):
+        result = preorder(self.root)
+        self.assertEqual(result[0], 5)
+
+    def test_postorder_root_last(self):
+        result = postorder(self.root)
+        self.assertEqual(result[-1], 5)
+
+    def test_level_order(self):
+        levels = level_order(self.root)
+        self.assertEqual(levels[0], [5])
+
+    def test_height(self):
+        self.assertGreaterEqual(height(self.root), 3)
+
+    def test_size(self):
+        self.assertEqual(tree_size(self.root), 7)
+
+    def test_search_found(self):
+        node = tree_search(self.root, 4)
+        self.assertIsNotNone(node)
+        self.assertEqual(node.value, 4)
+
+    def test_search_not_found(self):
+        self.assertIsNone(tree_search(self.root, 99))
+
+    def test_delete_leaf(self):
+        root = tree_delete(self.root, 1)
+        self.assertIsNone(tree_search(root, 1))
+
+    def test_min_node(self):
+        self.assertEqual(min_node(self.root).value, 1)
+
+    def test_max_node(self):
+        self.assertEqual(max_node(self.root).value, 8)
+
+    def test_is_bst(self):
+        self.assertTrue(is_bst(self.root))
+
+    def test_is_balanced(self):
+        self.assertTrue(tree_balanced(self.root))
+
+    def test_to_list_sorted(self):
+        self.assertEqual(tree_to_list(self.root), sorted([5, 3, 7, 1, 4, 6, 8]))
+
+    def test_tree_node_repr(self):
+        n = TreeNode(42)
+        self.assertIn("42", repr(n))
+
+    def test_empty_tree(self):
+        self.assertEqual(inorder(None), [])
+        self.assertEqual(height(None), 0)
+        self.assertEqual(tree_size(None), 0)
+
+
+class TestLinkedList(unittest.TestCase):
+    def test_append_and_to_list(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertEqual(ll.to_list(), [1, 2, 3])
+
+    def test_prepend(self):
+        ll = ll_from_list([2, 3])
+        ll.prepend(1)
+        self.assertEqual(ll.to_list(), [1, 2, 3])
+
+    def test_len(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertEqual(len(ll), 3)
+
+    def test_pop(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertEqual(ll.pop(), 3)
+        self.assertEqual(len(ll), 2)
+
+    def test_popleft(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertEqual(ll.popleft(), 1)
+
+    def test_find(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertEqual(ll.find(2).value, 2)
+        self.assertIsNone(ll.find(99))
+
+    def test_remove(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertTrue(ll.remove(2))
+        self.assertEqual(ll.to_list(), [1, 3])
+
+    def test_remove_not_found(self):
+        ll = ll_from_list([1, 2])
+        self.assertFalse(ll.remove(99))
+
+    def test_reverse(self):
+        ll = ll_from_list([1, 2, 3])
+        ll.reverse()
+        self.assertEqual(ll.to_list(), [3, 2, 1])
+
+    def test_iter(self):
+        ll = ll_from_list([10, 20, 30])
+        self.assertEqual(list(ll), [10, 20, 30])
+
+    def test_has_cycle_false(self):
+        ll = ll_from_list([1, 2, 3])
+        self.assertFalse(ll_has_cycle(ll))
+
+    def test_middle(self):
+        ll = ll_from_list([1, 2, 3, 4, 5])
+        self.assertEqual(middle(ll), 3)
+
+    def test_merge_sorted(self):
+        a = ll_from_list([1, 3, 5])
+        b = ll_from_list([2, 4, 6])
+        merged = merge_sorted(a, b)
+        self.assertEqual(merged.to_list(), [1, 2, 3, 4, 5, 6])
+
+    def test_remove_duplicates(self):
+        ll = ll_from_list([1, 2, 2, 3, 3])
+        remove_duplicates(ll)
+        self.assertEqual(ll.to_list(), [1, 2, 3])
+
+    def test_pop_empty_raises(self):
+        with self.assertRaises(IndexError):
+            LinkedList().pop()
+
+
+class TestStack(unittest.TestCase):
+    def test_push_pop(self):
+        s = Stack()
+        s.push(1)
+        s.push(2)
+        self.assertEqual(s.pop(), 2)
+
+    def test_peek(self):
+        s = Stack()
+        s.push(42)
+        self.assertEqual(s.peek(), 42)
+        self.assertEqual(len(s), 1)
+
+    def test_is_empty(self):
+        s = Stack()
+        self.assertTrue(s.is_empty())
+        s.push(1)
+        self.assertFalse(s.is_empty())
+
+    def test_clear(self):
+        s = Stack()
+        s.push(1)
+        s.clear()
+        self.assertTrue(s.is_empty())
+
+    def test_to_list_top_first(self):
+        s = Stack()
+        for v in [1, 2, 3]:
+            s.push(v)
+        self.assertEqual(s.to_list(), [3, 2, 1])
+
+    def test_pop_empty_raises(self):
+        with self.assertRaises(IndexError):
+            Stack().pop()
+
+    def test_is_balanced_valid(self):
+        self.assertTrue(stack_balanced("({[]})"))
+        self.assertTrue(stack_balanced(""))
+
+    def test_is_balanced_invalid(self):
+        self.assertFalse(stack_balanced("({[}])"))
+        self.assertFalse(stack_balanced("((())"))
+
+    def test_evaluate_rpn(self):
+        self.assertAlmostEqual(evaluate_rpn(["3", "4", "+", "2", "*"]), 14.0)
+
+    def test_infix_to_rpn(self):
+        tokens = infix_to_rpn("3 + 4 * 2")
+        result = evaluate_rpn(tokens)
+        self.assertAlmostEqual(result, 11.0)
+
+    def test_sort_stack(self):
+        s = Stack()
+        for v in [3, 1, 4, 2]:
+            s.push(v)
+        sorted_s = sort_stack(s)
+        items = sorted_s.to_list()
+        self.assertEqual(sorted(items), [1, 2, 3, 4])
+
+    def test_reverse_stack(self):
+        s = Stack()
+        for v in [1, 2, 3]:
+            s.push(v)
+        rev = reverse_stack(s)
+        self.assertEqual(rev.to_list(), [1, 2, 3])
+
+
+class TestFunctionalUtils(unittest.TestCase):
+    def test_identity(self):
+        self.assertEqual(fn_id(42), 42)
+        self.assertEqual(fn_id("hello"), "hello")
+
+    def test_always(self):
+        fn = always(99)
+        self.assertEqual(fn(), 99)
+        self.assertEqual(fn(1, 2, 3), 99)
+
+    def test_pipe(self):
+        process = fn_pipe(lambda x: x + 1, lambda x: x * 2)
+        self.assertEqual(process(3), 8)
+
+    def test_compose(self):
+        process = fn_compose(lambda x: x * 2, lambda x: x + 1)
+        self.assertEqual(process(3), 8)
+
+    def test_curry(self):
+        add = curry(lambda a, b, c: a + b + c)
+        self.assertEqual(add(1)(2)(3), 6)
+        self.assertEqual(add(1, 2)(3), 6)
+
+    def test_flip(self):
+        sub = flip(lambda a, b: a - b)
+        self.assertEqual(sub(3, 10), 7)
+
+    def test_tap_returns_value(self):
+        side = []
+        log = tap(lambda x: side.append(x))
+        self.assertEqual(log(42), 42)
+        self.assertEqual(side, [42])
+
+    def test_complement(self):
+        def is_even(x): return x % 2 == 0
+        is_odd = complement(is_even)
+        self.assertTrue(is_odd(3))
+        self.assertFalse(is_odd(4))
+
+    def test_juxt(self):
+        stats = juxt(min, max, sum)
+        self.assertEqual(stats([1, 2, 3]), [1, 3, 6])
+
+    def test_memoize(self):
+        calls = []
+        @fn_memoize
+        def fn(x):
+            calls.append(x)
+            return x * 2
+        fn(5)
+        fn(5)
+        self.assertEqual(len(calls), 1)
+
+    def test_reduce(self):
+        self.assertEqual(fn_reduce(lambda a, b: a + b, [1, 2, 3, 4]), 10)
+
+    def test_scan(self):
+        self.assertEqual(scan(lambda a, b: a + b, [1, 2, 3], 0), [0, 1, 3, 6])
+
+    def test_take(self):
+        self.assertEqual(take(3, range(10)), [0, 1, 2])
+
+    def test_drop(self):
+        self.assertEqual(drop(3, range(6)), [3, 4, 5])
+
+    def test_partition(self):
+        evens, odds = partition(lambda x: x % 2 == 0, range(6))
+        self.assertEqual(evens, [0, 2, 4])
+        self.assertEqual(odds, [1, 3, 5])
+
+    def test_group_by(self):
+        result = group_by(lambda x: x % 2, [1, 2, 3, 4])
+        self.assertEqual(result[0], [2, 4])
+        self.assertEqual(result[1], [1, 3])
+
+    def test_zip_with(self):
+        self.assertEqual(zip_with(lambda a, b: a + b, [1, 2], [3, 4]), [4, 6])
+
+    def test_unique(self):
+        self.assertEqual(unique([1, 2, 2, 3, 1]), [1, 2, 3])
+
+    def test_unique_with_key(self):
+        result = unique(["foo", "FOO", "bar"], key=str.lower)
+        self.assertEqual(len(result), 2)
+
+    def test_flatten_iter(self):
+        self.assertEqual(flatten_iter([[1, [2, 3]], [4]], depth=1), [1, [2, 3], 4])
+        self.assertEqual(flatten_iter([[1, [2, 3]], [4]], depth=2), [1, 2, 3, 4])
+
+
+class TestRegexUtils(unittest.TestCase):
+    def test_is_match_slug(self):
+        from util.regex_utils import SLUG_PATTERN
+        self.assertTrue(is_match(SLUG_PATTERN, "hello-world"))
+        self.assertFalse(is_match(SLUG_PATTERN, "Hello World"))
+
+    def test_find_all_emails(self):
+        text = "contact hello@example.com and support@test.org"
+        results = find_all(EMAIL_PATTERN, text)
+        self.assertIn("hello@example.com", results)
+        self.assertIn("support@test.org", results)
+
+    def test_find_all_dates(self):
+        text = "dates: 2024-01-15 and 2025-12-31"
+        results = find_all(DATE_PATTERN, text)
+        self.assertIn("2024-01-15", results)
+
+    def test_find_all_hex_colors(self):
+        text = "colors: #fff and #3498db"
+        results = find_all(HEX_COLOR_PATTERN, text)
+        self.assertGreaterEqual(len(results), 2)
+
+    def test_extract(self):
+        result = extract(r"(\d+)", "abc 123 def")
+        self.assertEqual(result, "123")
+
+    def test_replace(self):
+        self.assertEqual(re_replace(r"\d+", "NUM", "foo 123 bar 456"), "foo NUM bar NUM")
+
+    def test_split(self):
+        result = re_split(r"\s*,\s*", "a, b,c")
+        self.assertEqual(result, ["a", "b", "c"])
+
+    def test_named_groups(self):
+        pattern = r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})"
+        result = named_groups(pattern, "2025-05-11")
+        self.assertEqual(result["year"], "2025")
+        self.assertEqual(result["month"], "05")
+
+    def test_named_groups_no_match(self):
+        self.assertIsNone(named_groups(r"(?P<x>\d+)", "abc"))
+
+    def test_strip_html(self):
+        self.assertEqual(strip_html("<h1>Hello <b>World</b></h1>"), "Hello World")
+
+    def test_normalize_whitespace(self):
+        self.assertEqual(normalize_whitespace("  too   many  spaces  "), "too many spaces")
+
+    def test_escape(self):
+        result = escape("1+1=2?")
+        self.assertNotIn("+", result.replace("\\+", ""))
+
+
+class TestStatisticsUtils(unittest.TestCase):
+    DATA = [2, 4, 4, 4, 5, 5, 7, 9]
+
+    def test_mean(self):
+        self.assertAlmostEqual(stat_mean(self.DATA), 5.0)
+
+    def test_median(self):
+        self.assertAlmostEqual(stat_median(self.DATA), 4.5)
+
+    def test_mode(self):
+        self.assertEqual(mode(self.DATA), 4)
+
+    def test_variance(self):
+        self.assertGreater(stat_var(self.DATA), 0)
+
+    def test_stdev(self):
+        self.assertGreater(stdev(self.DATA), 0)
+
+    def test_harmonic_mean(self):
+        self.assertGreater(harmonic_mean([1, 2, 4]), 0)
+
+    def test_geometric_mean(self):
+        self.assertAlmostEqual(geometric_mean([1, 2, 4]), 2.0, places=4)
+
+    def test_weighted_mean(self):
+        result = weighted_mean([1, 2, 3], [1, 1, 1])
+        self.assertAlmostEqual(result, 2.0)
+
+    def test_quantile(self):
+        q = quantile(sorted(self.DATA), 0.5)
+        self.assertAlmostEqual(q, 4.5)
+
+    def test_quartiles(self):
+        q1, q2, q3 = quartiles(self.DATA)
+        self.assertLess(q1, q2)
+        self.assertLess(q2, q3)
+
+    def test_iqr(self):
+        self.assertGreater(iqr(self.DATA), 0)
+
+    def test_z_score(self):
+        z = z_score(5.0, self.DATA)
+        self.assertIsInstance(z, float)
+
+    def test_normalize(self):
+        result = stat_normalize([0, 5, 10])
+        self.assertAlmostEqual(result[0], 0.0)
+        self.assertAlmostEqual(result[-1], 1.0)
+
+    def test_covariance(self):
+        x = [1, 2, 3, 4, 5]
+        y = [2, 4, 6, 8, 10]
+        self.assertGreater(covariance(x, y), 0)
+
+    def test_correlation_perfect(self):
+        x = [1, 2, 3, 4, 5]
+        y = [2, 4, 6, 8, 10]
+        self.assertAlmostEqual(correlation(x, y), 1.0, places=5)
+
+    def test_moving_average(self):
+        result = moving_average([1, 2, 3, 4, 5], 3)
+        self.assertEqual(len(result), 3)
+        self.assertAlmostEqual(result[0], 2.0)
+
+    def test_outliers(self):
+        data = [2, 2, 2, 2, 2, 2, 2, 2, 2, 100]
+        result = outliers(data, threshold=1.5)
+        self.assertIn(100, result)
+
+    def test_frequency(self):
+        result = frequency([1, 2, 2, 3])
+        self.assertEqual(result[2]["count"], 2)
+
+    def test_describe_keys(self):
+        result = describe(self.DATA)
+        for key in ("count", "mean", "median", "stdev", "min", "max"):
+            self.assertIn(key, result)
+
+
+class TestRateLimitUtils(unittest.TestCase):
+    def test_rate_limit_exceeded_attributes(self):
+        e = RateLimitExceeded(1.5)
+        self.assertAlmostEqual(e.retry_after, 1.5)
+
+    def test_fixed_window_allows_within_limit(self):
+        fw = FixedWindow(limit=3, window=10.0)
+        self.assertTrue(fw.allow())
+        self.assertTrue(fw.allow())
+        self.assertTrue(fw.allow())
+
+    def test_fixed_window_rejects_over_limit(self):
+        fw = FixedWindow(limit=2, window=10.0)
+        fw.allow()
+        fw.allow()
+        self.assertFalse(fw.allow())
+
+    def test_fixed_window_remaining(self):
+        fw = FixedWindow(limit=3, window=10.0)
+        fw.allow()
+        self.assertEqual(fw.remaining(), 2)
+
+    def test_fixed_window_acquire_raises(self):
+        fw = FixedWindow(limit=1, window=10.0)
+        fw.acquire()
+        with self.assertRaises(RateLimitExceeded):
+            fw.acquire()
+
+    def test_fixed_window_repr(self):
+        self.assertIn("FixedWindow", repr(FixedWindow(5, 1.0)))
+
+    def test_sliding_window_allows(self):
+        sw = SlidingWindow(limit=3, window=10.0)
+        self.assertTrue(sw.allow())
+
+    def test_sliding_window_rejects_over_limit(self):
+        sw = SlidingWindow(limit=2, window=10.0)
+        sw.allow()
+        sw.allow()
+        self.assertFalse(sw.allow())
+
+    def test_sliding_window_repr(self):
+        self.assertIn("SlidingWindow", repr(SlidingWindow(5, 1.0)))
+
+    def test_token_bucket_allows_within_capacity(self):
+        tb = TokenBucket(capacity=5, rate=1.0)
+        for _ in range(5):
+            self.assertTrue(tb.allow())
+
+    def test_token_bucket_rejects_when_empty(self):
+        tb = TokenBucket(capacity=2, rate=0.1)
+        tb.allow()
+        tb.allow()
+        self.assertFalse(tb.allow())
+
+    def test_token_bucket_tokens_property(self):
+        tb = TokenBucket(capacity=10, rate=1.0)
+        self.assertAlmostEqual(tb.tokens, 10.0, places=1)
+
+    def test_token_bucket_repr(self):
+        self.assertIn("TokenBucket", repr(TokenBucket(5, 1.0)))
+
+    def test_leaky_bucket_allows(self):
+        lb = LeakyBucket(capacity=3, rate=1.0)
+        self.assertTrue(lb.allow())
+
+    def test_leaky_bucket_rejects_when_full(self):
+        lb = LeakyBucket(capacity=2, rate=0.01)
+        lb.allow()
+        lb.allow()
+        self.assertFalse(lb.allow())
+
+    def test_leaky_bucket_repr(self):
+        self.assertIn("LeakyBucket", repr(LeakyBucket(3, 1.0)))
+
+    def test_try_acquire_token_bucket(self):
+        tb = TokenBucket(capacity=1, rate=0.01)
+        self.assertTrue(try_acquire(tb))
+        self.assertFalse(try_acquire(tb))
+
+
+class TestCircuitBreaker(unittest.TestCase):
+    def _make(self, **kw):
+        return CircuitBreaker(name="test", failure_threshold=3,
+                              recovery_timeout=60.0, **kw)
+
+    def test_initial_state_closed(self):
+        cb = self._make()
+        self.assertTrue(cb.is_closed)
+        self.assertEqual(cb.state, State.CLOSED)
+
+    def test_successful_call(self):
+        cb = self._make()
+        result = cb.call(lambda: "ok")
+        self.assertEqual(result, "ok")
+
+    def test_opens_after_failure_threshold(self):
+        cb = self._make()
+        for _ in range(3):
+            try:
+                cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
+            except RuntimeError:
+                pass
+        self.assertTrue(cb.is_open)
+
+    def test_open_rejects_calls(self):
+        cb = self._make()
+        cb.trip()
+        with self.assertRaises(CircuitBreakerOpen):
+            cb.call(lambda: "ok")
+
+    def test_trip_opens_immediately(self):
+        cb = self._make()
+        cb.trip()
+        self.assertTrue(cb.is_open)
+
+    def test_reset_closes(self):
+        cb = self._make()
+        cb.trip()
+        cb.reset()
+        self.assertTrue(cb.is_closed)
+
+    def test_stats_keys(self):
+        cb = self._make()
+        stats = cb.stats
+        for key in ("name", "state", "total_calls", "total_failures"):
+            self.assertIn(key, stats)
+
+    def test_circuit_breaker_open_attributes(self):
+        e = CircuitBreakerOpen("svc", 5.0)
+        self.assertEqual(e.name, "svc")
+        self.assertAlmostEqual(e.retry_after, 5.0)
+
+    def test_repr(self):
+        cb = self._make()
+        self.assertIn("test", repr(cb))
+
+    def test_as_decorator(self):
+        cb = self._make()
+        @cb
+        def fn():
+            return "data"
+        self.assertEqual(fn(), "data")
+
+    def test_on_open_callback(self):
+        events = []
+        cb = CircuitBreaker("cb2", failure_threshold=2, recovery_timeout=60.0,
+                            on_open=lambda c: events.append("opened"))
+        for _ in range(2):
+            try:
+                cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+            except RuntimeError:
+                pass
+        self.assertIn("opened", events)
+
+
+class TestCircuitBreakerRegistry(unittest.TestCase):
+    def test_get_or_create(self):
+        registry = CircuitBreakerRegistry()
+        cb = registry.get_or_create("svc1")
+        self.assertIsInstance(cb, CircuitBreaker)
+
+    def test_same_name_returns_same(self):
+        registry = CircuitBreakerRegistry()
+        cb1 = registry.get_or_create("svc")
+        cb2 = registry.get_or_create("svc")
+        self.assertIs(cb1, cb2)
+
+    def test_get_existing(self):
+        registry = CircuitBreakerRegistry()
+        registry.get_or_create("svc")
+        self.assertIsNotNone(registry.get("svc"))
+
+    def test_get_missing(self):
+        registry = CircuitBreakerRegistry()
+        self.assertIsNone(registry.get("missing"))
+
+    def test_names(self):
+        registry = CircuitBreakerRegistry()
+        registry.get_or_create("a")
+        registry.get_or_create("b")
+        self.assertIn("a", registry.names())
+        self.assertIn("b", registry.names())
+
+    def test_reset_all(self):
+        registry = CircuitBreakerRegistry()
+        cb = registry.get_or_create("svc")
+        cb.trip()
+        registry.reset_all()
+        self.assertTrue(cb.is_closed)
+
+
+class TestEvent(unittest.TestCase):
+    def test_attributes(self):
+        e = Event("user.login", {"user": "alice"}, source="web")
+        self.assertEqual(e.name, "user.login")
+        self.assertEqual(e.data, {"user": "alice"})
+        self.assertEqual(e.source, "web")
+
+    def test_not_stopped_initially(self):
+        self.assertFalse(Event("x").is_stopped)
+
+    def test_stop_propagation(self):
+        e = Event("x")
+        e.stop_propagation()
+        self.assertTrue(e.is_stopped)
+
+    def test_repr(self):
+        e = Event("ping", 42)
+        self.assertIn("ping", repr(e))
+
+
+class TestEventBus(unittest.TestCase):
+    def setUp(self):
+        self.bus = EventBus()
+
+    def test_subscribe_and_publish(self):
+        received = []
+        self.bus.subscribe("evt", lambda e: received.append(e.data))
+        self.bus.publish("evt", 42)
+        self.assertEqual(received, [42])
+
+    def test_once_fires_once(self):
+        received = []
+        self.bus.once("ping", lambda e: received.append(1))
+        self.bus.publish("ping")
+        self.bus.publish("ping")
+        self.assertEqual(received, [1])
+
+    def test_unsubscribe(self):
+        def fn(e): pass
+        self.bus.subscribe("x", fn)
+        removed = self.bus.unsubscribe("x", fn)
+        self.assertTrue(removed)
+        self.assertEqual(self.bus.listener_count("x"), 0)
+
+    def test_priority_order(self):
+        order = []
+        self.bus.subscribe("t", lambda e: order.append("low"), priority=1)
+        self.bus.subscribe("t", lambda e: order.append("high"), priority=10)
+        self.bus.publish("t")
+        self.assertEqual(order, ["high", "low"])
+
+    def test_stop_propagation(self):
+        reached = []
+        def stopper(e):
+            reached.append("first")
+            e.stop_propagation()
+        self.bus.subscribe("e", stopper, priority=10)
+        self.bus.subscribe("e", lambda e: reached.append("second"), priority=1)
+        self.bus.publish("e")
+        self.assertEqual(reached, ["first"])
+
+    def test_wildcard(self):
+        caught = []
+        self.bus.subscribe("user.*", lambda e: caught.append(e.name))
+        self.bus.publish("user.login")
+        self.bus.publish("user.logout")
+        self.bus.publish("order.placed")
+        self.assertEqual(caught, ["user.login", "user.logout"])
+
+    def test_catch_all(self):
+        caught = []
+        self.bus.subscribe("*", lambda e: caught.append(e.name))
+        self.bus.publish("a")
+        self.bus.publish("b")
+        self.assertEqual(caught, ["a", "b"])
+
+    def test_clear(self):
+        self.bus.subscribe("x", lambda e: None)
+        self.bus.clear("x")
+        self.assertEqual(self.bus.listener_count("x"), 0)
+
+    def test_listener_count(self):
+        self.bus.subscribe("x", lambda e: None)
+        self.bus.subscribe("x", lambda e: None)
+        self.assertEqual(self.bus.listener_count("x"), 2)
+
+    def test_wait_for(self):
+        import threading
+        def trigger():
+            import time
+            time.sleep(0.05)
+            self.bus.publish("ready", 99)
+        threading.Thread(target=trigger, daemon=True).start()
+        event = self.bus.wait_for("ready", timeout=2.0)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.data, 99)
+
+    def test_wait_for_timeout(self):
+        result = self.bus.wait_for("never", timeout=0.05)
+        self.assertIsNone(result)
+
+    def test_repr(self):
+        self.assertIn("EventBus", repr(self.bus))
+
+
+class TestPipeline(unittest.TestCase):
+    def test_run(self):
+        p = Pipeline(lambda x: x + 1, lambda x: x * 2)
+        self.assertEqual(p.run(3), 8)
+
+    def test_call(self):
+        p = Pipeline(str.upper)
+        self.assertEqual(p("hello"), "HELLO")
+
+    def test_pipe_extends(self):
+        p1 = Pipeline(lambda x: x + 1)
+        p2 = p1.pipe(lambda x: x * 2)
+        self.assertEqual(p2.run(3), 8)
+
+    def test_len(self):
+        p = Pipeline(str.strip, str.lower)
+        self.assertEqual(len(p), 2)
+
+    def test_repr(self):
+        p = Pipeline(str.strip)
+        self.assertIn("strip", repr(p))
+
+    def test_compose(self):
+        fn = pipe_compose(lambda x: x + 1, lambda x: x * 2)
+        self.assertEqual(fn(3), 8)
+
+    def test_branch_true(self):
+        step = branch(lambda x: x > 0, lambda x: "positive", lambda x: "non-positive")
+        self.assertEqual(step(5), "positive")
+
+    def test_branch_false(self):
+        step = branch(lambda x: x > 0, lambda x: "positive", lambda x: "non-positive")
+        self.assertEqual(step(-1), "non-positive")
+
+
+class TestContextUtils(unittest.TestCase):
+    def test_suppress_swallows_exception(self):
+        with suppress(ZeroDivisionError):
+            _ = 1 / 0
+
+    def test_suppress_lets_other_through(self):
+        with self.assertRaises(ValueError):
+            with suppress(ZeroDivisionError):
+                raise ValueError("not suppressed")
+
+    def test_temp_dir_creates_path(self):
+        with temp_dir() as d:
+            self.assertTrue(d.exists())
+            (d / "test.txt").write_text("hello")
+
+    def test_temp_dir_cleaned_up(self):
+        with temp_dir() as d:
+            path = d
+        self.assertFalse(path.exists())
+
+    def test_temp_env_sets_var(self):
+        with temp_env(MY_TEST_VAR="hello"):
+            self.assertEqual(os.environ.get("MY_TEST_VAR"), "hello")
+
+    def test_temp_env_restores_var(self):
+        with temp_env(MY_TEST_VAR="hello"):
+            pass
+        self.assertIsNone(os.environ.get("MY_TEST_VAR"))
+
+    def test_managed_resource_active(self):
+        res = ManagedResource("db")
+        with res:
+            self.assertTrue(res.active)
+        self.assertFalse(res.active)
+
+    def test_managed_resource_repr(self):
+        res = ManagedResource("cache")
+        self.assertIn("cache", repr(res))
 
 
 if __name__ == "__main__":

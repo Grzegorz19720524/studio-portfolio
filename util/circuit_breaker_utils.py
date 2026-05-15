@@ -87,7 +87,7 @@ class CircuitBreaker:
 
         try:
             result = fn(*args, **kwargs)
-        except self.expected_exceptions as exc:
+        except self.expected_exceptions:
             with self._lock:
                 self._total_failures += 1
                 self._failure_count += 1
@@ -283,10 +283,14 @@ if __name__ == "__main__":
         on_close=lambda c: events.append("closed"),
         on_half_open=lambda c: events.append("half_open"),
     )
-    try: cb2.call(flaky, fail=True)
-    except: pass
-    try: cb2.call(flaky, fail=True)
-    except: pass
+    try:
+        cb2.call(flaky, fail=True)
+    except Exception:
+        pass
+    try:
+        cb2.call(flaky, fail=True)
+    except Exception:
+        pass
     time.sleep(0.15)
     cb2.call(flaky)
     print("events:", events)
@@ -301,10 +305,14 @@ if __name__ == "__main__":
         return "data"
 
     print("fetch ok:", fetch_data())
-    try: fetch_data(fail=True)
-    except RuntimeError: pass
-    try: fetch_data(fail=True)
-    except RuntimeError: pass
+    try:
+        fetch_data(fail=True)
+    except RuntimeError:
+        pass
+    try:
+        fetch_data(fail=True)
+    except RuntimeError:
+        pass
     print("state:", cb3.state.value)
     try:
         fetch_data()
@@ -319,10 +327,14 @@ if __name__ == "__main__":
         return "charged"
 
     print("charge ok:", charge())
-    try: charge(fail=True)
-    except ValueError: pass
-    try: charge(fail=True)
-    except ValueError: pass
+    try:
+        charge(fail=True)
+    except ValueError:
+        pass
+    try:
+        charge(fail=True)
+    except ValueError:
+        pass
     try:
         charge()
     except CircuitBreakerOpen as e:

@@ -1,5 +1,4 @@
 import tomllib
-import io
 from typing import Any
 
 

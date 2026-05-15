@@ -83,10 +83,6 @@ class EventBus:
                 if pattern == event_name or pattern == "*" or fnmatch.fnmatch(event_name, pattern):
                     matching.extend(subs)
             matching.sort(key=lambda s: -s.priority)
-            once_subs = [(event_name if s in self._subs.get(event_name, []) else p, s.handler)
-                         for p, subs in self._subs.items()
-                         for s in subs if s.once and s in matching]
-
         for sub in matching:
             if event.is_stopped:
                 break
@@ -329,8 +325,8 @@ if __name__ == "__main__":
 
     print("\n--- listener_count / unsubscribe ---")
     bus11 = EventBus()
-    h1 = lambda e: None
-    h2 = lambda e: None
+    def h1(e): pass
+    def h2(e): pass
     bus11.subscribe("x", h1)
     bus11.subscribe("x", h2)
     print("count before:", bus11.listener_count("x"))

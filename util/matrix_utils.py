@@ -1,4 +1,3 @@
-from typing import Any
 
 Matrix = list[list[float]]
 
