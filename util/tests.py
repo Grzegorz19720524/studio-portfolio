@@ -110,6 +110,21 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.toml_utils import (parse_string as toml_parse, to_string as toml_to_str,
+                              get as toml_get, set_value as toml_set, has_key as toml_has_key,
+                              merge as toml_merge, flatten_keys, keys_at, write_toml, read_toml)
+from util.xml_utils import (parse_string as xml_parse, to_string as xml_to_str,
+                             create_element, add_child, remove_child,
+                             find as xml_find, find_all as xml_find_all,
+                             get_attr, set_attr, get_text, set_text,
+                             get_all_text, element_to_dict, dict_to_element)
+from util.ini_utils import (parse_string as ini_parse, to_string as ini_to_str,
+                             get as ini_get, get_int as ini_get_int,
+                             get_float as ini_get_float, get_bool as ini_get_bool,
+                             set_value as ini_set, has_section, has_key as ini_has_key,
+                             sections, keys as ini_keys, items as ini_items,
+                             to_dict as ini_to_dict, from_dict as ini_from_dict,
+                             remove_section, remove_key, merge as ini_merge)
 from util.websocket_utils import (WebSocketError, WebSocketClosed, Frame,
                                    WebSocketClient, OP_TEXT, OP_BINARY,
                                    OP_CLOSE, OP_PING, OP_PONG, _encode_frame)
@@ -3780,6 +3795,302 @@ class TestTemplateUtils(unittest.TestCase):
     def test_template_class_no_context(self):
         t = Template("static text")
         self.assertEqual(t.render(), "static text")
+
+
+TOML_TEXT = """
+[project]
+name = "MyApp"
+version = "1.0"
+debug = false
+tags = ["python", "util"]
+
+[database]
+host = "localhost"
+port = 5432
+
+[database.pool]
+min = 2
+max = 10
+"""
+
+INI_TEXT = """
+[database]
+host = localhost
+port = 5432
+debug = true
+
+[server]
+host = 0.0.0.0
+port = 8080
+timeout = 30.5
+"""
+
+XML_TEXT = """<library>
+    <book id="1" genre="fiction">
+        <title>The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+    </book>
+    <book id="2" genre="sci-fi">
+        <title>Dune</title>
+        <author>Frank Herbert</author>
+    </book>
+</library>"""
+
+
+class TestTomlUtils(unittest.TestCase):
+    def setUp(self):
+        self.data = toml_parse(TOML_TEXT)
+
+    def test_parse_string_returns_dict(self):
+        self.assertIsInstance(self.data, dict)
+
+    def test_get_scalar(self):
+        self.assertEqual(toml_get(self.data, "project.name"), "MyApp")
+
+    def test_get_nested(self):
+        self.assertEqual(toml_get(self.data, "database.pool.max"), 10)
+
+    def test_get_missing_returns_default(self):
+        self.assertIsNone(toml_get(self.data, "missing.key"))
+        self.assertEqual(toml_get(self.data, "missing.key", "N/A"), "N/A")
+
+    def test_has_key_true(self):
+        self.assertTrue(toml_has_key(self.data, "database.host"))
+
+    def test_has_key_false(self):
+        self.assertFalse(toml_has_key(self.data, "cache.ttl"))
+
+    def test_set_value_new_key(self):
+        toml_set(self.data, "cache.ttl", 300)
+        self.assertEqual(toml_get(self.data, "cache.ttl"), 300)
+
+    def test_set_value_overwrite(self):
+        toml_set(self.data, "database.port", 5433)
+        self.assertEqual(toml_get(self.data, "database.port"), 5433)
+
+    def test_merge_overrides(self):
+        override = {"database": {"port": 9999}}
+        merged = toml_merge(self.data, override)
+        self.assertEqual(toml_get(merged, "database.port"), 9999)
+
+    def test_merge_preserves_base(self):
+        override = {"new_key": "value"}
+        merged = toml_merge(self.data, override)
+        self.assertEqual(toml_get(merged, "project.name"), "MyApp")
+
+    def test_flatten_keys(self):
+        flat = flatten_keys(self.data)
+        self.assertIn("database.host", flat)
+        self.assertIn("database.pool.min", flat)
+
+    def test_keys_at(self):
+        result = keys_at(self.data, "database")
+        self.assertIn("host", result)
+        self.assertIn("port", result)
+
+    def test_keys_at_missing_returns_empty(self):
+        self.assertEqual(keys_at(self.data, "nonexistent"), [])
+
+    def test_to_string_contains_key(self):
+        s = toml_to_str({"app": {"name": "Test"}, "port": 8000})
+        self.assertIn("port", s)
+        self.assertIn("8000", s)
+
+    def test_write_and_read_toml(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as f:
+            tmp = f.name
+        try:
+            write_toml(tmp, {"x": 1, "y": "hello"})
+            result = read_toml(tmp)
+            self.assertEqual(result["x"], 1)
+            self.assertEqual(result["y"], "hello")
+        finally:
+            os.unlink(tmp)
+
+
+class TestXmlUtils(unittest.TestCase):
+    def setUp(self):
+        self.root = xml_parse(XML_TEXT)
+
+    def test_parse_string_tag(self):
+        self.assertEqual(self.root.tag, "library")
+
+    def test_find_first(self):
+        book = xml_find(self.root, "book")
+        self.assertIsNotNone(book)
+        self.assertEqual(book.tag, "book")
+
+    def test_find_all(self):
+        books = xml_find_all(self.root, "book")
+        self.assertEqual(len(books), 2)
+
+    def test_get_attr(self):
+        book = xml_find(self.root, "book")
+        self.assertEqual(get_attr(book, "id"), "1")
+
+    def test_get_attr_default(self):
+        book = xml_find(self.root, "book")
+        self.assertIsNone(get_attr(book, "missing"))
+
+    def test_set_attr(self):
+        book = xml_find(self.root, "book")
+        set_attr(book, "year", "1925")
+        self.assertEqual(get_attr(book, "year"), "1925")
+
+    def test_get_text(self):
+        book = xml_find(self.root, "book")
+        title = xml_find(book, "title")
+        self.assertEqual(get_text(title), "The Great Gatsby")
+
+    def test_get_text_none_returns_default(self):
+        self.assertEqual(get_text(None, "default"), "default")
+
+    def test_set_text(self):
+        book = xml_find(self.root, "book")
+        title = xml_find(book, "title")
+        set_text(title, "New Title")
+        self.assertEqual(get_text(title), "New Title")
+
+    def test_get_all_text(self):
+        book = xml_find(self.root, "book")
+        text = get_all_text(book)
+        self.assertIn("Gatsby", text)
+        self.assertIn("Fitzgerald", text)
+
+    def test_create_element(self):
+        el = create_element("item", text="hello", id="42")
+        self.assertEqual(el.tag, "item")
+        self.assertEqual(el.text, "hello")
+        self.assertEqual(el.get("id"), "42")
+
+    def test_add_child(self):
+        root = create_element("root")
+        child = add_child(root, "child", text="value")
+        self.assertEqual(len(list(root)), 1)
+        self.assertEqual(child.text, "value")
+
+    def test_remove_child(self):
+        root = create_element("root")
+        child = add_child(root, "child")
+        remove_child(root, child)
+        self.assertEqual(len(list(root)), 0)
+
+    def test_to_string_contains_tag(self):
+        el = create_element("note", text="hi")
+        s = xml_to_str(el)
+        self.assertIn("note", s)
+        self.assertIn("hi", s)
+
+    def test_element_to_dict_has_attrs(self):
+        book = xml_find(self.root, "book")
+        d = element_to_dict(book)
+        self.assertIn("@attrs", d)
+        self.assertEqual(d["@attrs"]["id"], "1")
+
+    def test_element_to_dict_has_children(self):
+        book = xml_find(self.root, "book")
+        d = element_to_dict(book)
+        self.assertIn("title", d)
+
+    def test_dict_to_element(self):
+        data = {"@attrs": {"id": "5"}, "title": "Test"}
+        el = dict_to_element("book", data)
+        self.assertEqual(el.tag, "book")
+        self.assertEqual(el.get("id"), "5")
+
+
+class TestIniUtils(unittest.TestCase):
+    def setUp(self):
+        self.config = ini_parse(INI_TEXT)
+
+    def test_sections(self):
+        self.assertIn("database", sections(self.config))
+        self.assertIn("server", sections(self.config))
+
+    def test_get_string(self):
+        self.assertEqual(ini_get(self.config, "database", "host"), "localhost")
+
+    def test_get_missing_returns_default(self):
+        self.assertEqual(ini_get(self.config, "missing", "key", "N/A"), "N/A")
+
+    def test_get_int(self):
+        self.assertEqual(ini_get_int(self.config, "database", "port"), 5432)
+
+    def test_get_int_missing_returns_default(self):
+        self.assertEqual(ini_get_int(self.config, "missing", "key", 99), 99)
+
+    def test_get_float(self):
+        self.assertAlmostEqual(ini_get_float(self.config, "server", "timeout"), 30.5)
+
+    def test_get_bool_true(self):
+        self.assertTrue(ini_get_bool(self.config, "database", "debug"))
+
+    def test_get_bool_missing_returns_default(self):
+        self.assertFalse(ini_get_bool(self.config, "missing", "key"))
+
+    def test_has_section_true(self):
+        self.assertTrue(has_section(self.config, "server"))
+
+    def test_has_section_false(self):
+        self.assertFalse(has_section(self.config, "cache"))
+
+    def test_has_key_true(self):
+        self.assertTrue(ini_has_key(self.config, "database", "host"))
+
+    def test_has_key_false(self):
+        self.assertFalse(ini_has_key(self.config, "database", "missing"))
+
+    def test_set_value_new_section(self):
+        ini_set(self.config, "cache", "ttl", "300")
+        self.assertEqual(ini_get(self.config, "cache", "ttl"), "300")
+
+    def test_set_value_existing(self):
+        ini_set(self.config, "database", "host", "remotehost")
+        self.assertEqual(ini_get(self.config, "database", "host"), "remotehost")
+
+    def test_keys(self):
+        k = ini_keys(self.config, "database")
+        self.assertIn("host", k)
+        self.assertIn("port", k)
+
+    def test_keys_missing_section(self):
+        self.assertEqual(ini_keys(self.config, "nonexistent"), [])
+
+    def test_items(self):
+        it = ini_items(self.config, "server")
+        self.assertIn("port", it)
+
+    def test_items_missing_section(self):
+        self.assertEqual(ini_items(self.config, "nonexistent"), {})
+
+    def test_to_dict(self):
+        d = ini_to_dict(self.config)
+        self.assertIn("database", d)
+        self.assertEqual(d["database"]["host"], "localhost")
+
+    def test_from_dict(self):
+        cfg = ini_from_dict({"app": {"name": "MyApp", "version": "1.0"}})
+        self.assertEqual(ini_get(cfg, "app", "name"), "MyApp")
+
+    def test_remove_section(self):
+        remove_section(self.config, "server")
+        self.assertFalse(has_section(self.config, "server"))
+
+    def test_remove_key(self):
+        remove_key(self.config, "database", "debug")
+        self.assertFalse(ini_has_key(self.config, "database", "debug"))
+
+    def test_merge(self):
+        override = ini_parse("[server]\nport = 9090\n[cache]\nttl = 600\n")
+        merged = ini_merge(self.config, override)
+        self.assertEqual(ini_get(merged, "server", "port"), "9090")
+        self.assertEqual(ini_get(merged, "cache", "ttl"), "600")
+
+    def test_to_string(self):
+        cfg = ini_from_dict({"section": {"key": "val"}})
+        s = ini_to_str(cfg)
+        self.assertIn("section", s)
+        self.assertIn("key", s)
 
 
 if __name__ == "__main__":
