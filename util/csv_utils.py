@@ -110,7 +110,8 @@ def deduplicate(rows: list[dict], key: str) -> list[dict]:
 
 
 if __name__ == "__main__":
-    import tempfile, os
+    import tempfile
+    import os
 
     data = [
         {"name": "Alice", "age": "30", "city": "Warsaw"},

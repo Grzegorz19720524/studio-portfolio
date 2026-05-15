@@ -1,7 +1,6 @@
 import json
 import urllib.error
 import urllib.request
-from typing import Any
 
 
 def _request(method: str, url: str, data: dict | None = None, headers: dict | None = None) -> dict:

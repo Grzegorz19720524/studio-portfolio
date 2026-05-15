@@ -83,8 +83,7 @@ def _render_tokens(tokens: list, context: dict, pos: int = 0) -> tuple[str, int]
                 cond_expr = parts[1] if len(parts) > 1 else ""
                 pos += 1
                 body, pos = _render_tokens(tokens, context, pos)
-                tag_kind, tag_val = tokens[pos][0], tokens[pos][1].split(None, 1)
-                tag_kw = tag_val[0] if tag_val else ""
+                _, _ = tokens[pos][0], tokens[pos][1].split(None, 1)
                 if _resolve(cond_expr, context):
                     result.append(body)
                     while pos < len(tokens) and tokens[pos][1].split()[0] not in ("endif",):

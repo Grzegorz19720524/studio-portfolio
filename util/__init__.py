@@ -103,7 +103,7 @@ from util.color_utils import (
     complementary, random_color, analogous, triadic,
 )
 from util.matrix_utils import (
-    zeros, ones, identity, shape, is_square, transpose,
+    zeros, ones, shape, is_square, transpose,
     add, subtract, scalar_multiply, multiply, trace, determinant,
     flatten as matrix_flatten, reshape, get_row, get_col,
     map_matrix, print_matrix,
@@ -116,7 +116,7 @@ from util.tree_utils import (
     TreeNode, insert, search, delete as tree_delete,
     inorder, preorder, postorder, level_order,
     height, size, min_node, max_node,
-    is_bst, is_balanced, from_list, to_list, pretty_print,
+    is_bst, from_list, to_list, pretty_print,
 )
 from util.linked_list_utils import (
     Node, LinkedList,
@@ -134,7 +134,7 @@ from util.sort_utils import (
 )
 from util.io_utils import (
     read_lines, write_lines, read_bytes, write_bytes,
-    append_text, head, tail, count_lines, grep,
+    append_text, tail, count_lines, grep,
     stream_lines, find_files, atomic_write,
     backup, checksum, touch, file_size,
 )
@@ -502,7 +502,6 @@ __all__ = [
     "triadic",
     "zeros",
     "ones",
-    "identity",
     "shape",
     "is_square",
     "transpose",
@@ -539,7 +538,6 @@ __all__ = [
     "min_node",
     "max_node",
     "is_bst",
-    "is_balanced",
     "from_list",
     "to_list",
     "pretty_print",
@@ -572,7 +570,6 @@ __all__ = [
     "read_bytes",
     "write_bytes",
     "append_text",
-    "head",
     "tail",
     "count_lines",
     "grep",

@@ -1,4 +1,4 @@
-from typing import Callable, Any, Type
+from typing import Callable, Any
 
 
 class Plugin:

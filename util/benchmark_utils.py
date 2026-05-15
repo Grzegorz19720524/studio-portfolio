@@ -1,6 +1,6 @@
 import time
 import statistics
-from typing import Callable, Any
+from typing import Callable
 
 
 def measure(fn: Callable, *args, runs: int = 100, **kwargs) -> dict:

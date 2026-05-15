@@ -7,7 +7,7 @@ import os
 import threading
 import time
 import urllib.parse
-from typing import Callable, Any
+from typing import Callable
 
 
 # WebSocket opcodes

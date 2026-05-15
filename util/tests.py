@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import os
-from datetime import date, timedelta
+from datetime import date
 from util.helpers import slugify, truncate, flatten, chunk, timestamp
 from util.validators import is_email, is_url, is_phone, is_non_empty, is_in_range, is_min_length
 from util.config import Config
@@ -22,7 +22,7 @@ from util.env_utils import get_env, require_env, get_bool, get_int, get_float, g
 from util.retry_utils import retry, with_fallback
 from util.token_utils import (generate_token, generate_urlsafe_token, generate_uuid,
                                generate_short_id, create_signed_token, verify_signed_token, hash_token)
-from util.pagination_utils import Page, paginate, page_range
+from util.pagination_utils import paginate, page_range
 from util.search_utils import filter_by, search_by_key, sort_by, fuzzy_match, highlight, multi_search
 from util.serializer_utils import to_json, from_json, to_csv, from_csv, to_flat, from_flat, pick, omit
 from util.compression_utils import (zlib_compress, zlib_decompress, gzip_compress, gzip_decompress,
@@ -43,7 +43,6 @@ from util.http_client_utils import (HttpError, Response, HttpClient,
                                      build_url, encode_params, parse_url)
 from util.smtp_utils import (SmtpError, Attachment, EmailMessage, SmtpClient, message)
 import logging
-import io
 import signal as _signal
 from util.logger import get_logger
 from util.http_utils import is_ok
@@ -63,8 +62,7 @@ from util.matrix_utils import (zeros, ones, identity as mat_identity, shape,
                                 multiply as mat_mul, trace, determinant,
                                 flatten as mat_flatten, reshape,
                                 get_row, get_col, map_matrix)
-from util.tree_utils import (TreeNode, insert as tree_insert,
-                              search as tree_search, delete as tree_delete,
+from util.tree_utils import (TreeNode, search as tree_search, delete as tree_delete,
                               inorder, preorder, postorder, level_order,
                               height, size as tree_size, min_node, max_node,
                               is_bst, is_balanced as tree_balanced,
@@ -1696,7 +1694,7 @@ class TestSmtpClient(unittest.TestCase):
         client.disconnect()
 
     def test_send_with_mock(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
         mock_conn = MagicMock()
         client = SmtpClient("smtp.example.com")
         client._conn = mock_conn
@@ -1853,10 +1851,10 @@ class TestWebSocketClient(unittest.TestCase):
         self.assertFalse(ws.is_connected)
 
     def test_callbacks_stored(self):
-        on_msg = lambda m: None
-        on_cls = lambda c, r: None
-        on_err = lambda e: None
-        on_png = lambda d: None
+        def on_msg(m): pass
+        def on_cls(c, r): pass
+        def on_err(e): pass
+        def on_png(d): pass
         ws = WebSocketClient(
             "ws://example.com/ws",
             on_message=on_msg,
@@ -1952,7 +1950,7 @@ class TestSignalHandle(unittest.TestCase):
         self.assertIs(current_handler(_signal.SIGINT), _signal.SIG_DFL)
 
     def test_current_handler_returns_handler(self):
-        fn = lambda s, f: None
+        def fn(s, f): pass
         handle(_signal.SIGINT, fn)
         self.assertIs(current_handler(_signal.SIGINT), fn)
 
@@ -2110,7 +2108,8 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(log.level, logging.DEBUG)
 
     def test_file_handler_added(self):
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "test.log")
             log = get_logger("test.filehandler", log_file=path)
@@ -2121,7 +2120,8 @@ class TestLogger(unittest.TestCase):
             self.assertIn(logging.FileHandler, handler_types)
 
     def test_log_file_created(self):
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "subdir", "app.log")
             log = get_logger("test.filecreated", log_file=path)
@@ -2182,7 +2182,7 @@ class TestEventEmitter(unittest.TestCase):
         self.assertEqual(received, [1])
 
     def test_off_removes_listener(self):
-        fn = lambda x: None
+        def fn(x): pass
         self.emitter.on("evt", fn)
         removed = self.emitter.off("evt", fn)
         self.assertTrue(removed)
@@ -2195,8 +2195,8 @@ class TestEventEmitter(unittest.TestCase):
         self.assertEqual(self.emitter.emit("nothing"), 0)
 
     def test_listeners_includes_on_and_once(self):
-        f1 = lambda: None
-        f2 = lambda: None
+        def f1(): pass
+        def f2(): pass
         self.emitter.on("e", f1)
         self.emitter.once("e", f2)
         self.assertIn(f1, self.emitter.listeners("e"))
@@ -2380,14 +2380,14 @@ class TestObservable(unittest.TestCase):
 
     def test_subscribe_no_duplicates(self):
         obs = Observable()
-        fn = lambda: None
+        def fn(): pass
         obs.subscribe(fn)
         obs.subscribe(fn)
         self.assertEqual(obs.observer_count(), 1)
 
     def test_unsubscribe(self):
         obs = Observable()
-        fn = lambda x: None
+        def fn(x): pass
         obs.subscribe(fn)
         removed = obs.unsubscribe(fn)
         self.assertTrue(removed)
@@ -2421,7 +2421,7 @@ class TestObservableValue(unittest.TestCase):
         self.assertEqual(changes, [])
 
     def test_unsubscribe(self):
-        fn = lambda n, o: None
+        def fn(n, o): pass
         ov = ObservableValue(0)
         ov.subscribe(fn)
         self.assertTrue(ov.unsubscribe(fn))
@@ -2536,12 +2536,12 @@ class TestColorUtils(unittest.TestCase):
         self.assertEqual(rgb_to_hex(r, g, b), original)
 
     def test_rgb_to_hsl_white(self):
-        h, s, l = rgb_to_hsl(255, 255, 255)
-        self.assertAlmostEqual(l, 100, places=0)
+        h, s, lightness = rgb_to_hsl(255, 255, 255)
+        self.assertAlmostEqual(lightness, 100, places=0)
 
     def test_hsl_to_rgb_round_trip(self):
-        h, s, l = rgb_to_hsl(100, 150, 200)
-        r, g, b = hsl_to_rgb(h, s, l)
+        h, s, lightness = rgb_to_hsl(100, 150, 200)
+        r, g, b = hsl_to_rgb(h, s, lightness)
         self.assertAlmostEqual(r, 100, delta=2)
         self.assertAlmostEqual(g, 150, delta=2)
         self.assertAlmostEqual(b, 200, delta=2)
@@ -2918,7 +2918,7 @@ class TestFunctionalUtils(unittest.TestCase):
         self.assertEqual(side, [42])
 
     def test_complement(self):
-        is_even = lambda x: x % 2 == 0
+        def is_even(x): return x % 2 == 0
         is_odd = complement(is_even)
         self.assertTrue(is_odd(3))
         self.assertFalse(is_odd(4))
@@ -2933,7 +2933,8 @@ class TestFunctionalUtils(unittest.TestCase):
         def fn(x):
             calls.append(x)
             return x * 2
-        fn(5); fn(5)
+        fn(5)
+        fn(5)
         self.assertEqual(len(calls), 1)
 
     def test_reduce(self):
@@ -3118,7 +3119,8 @@ class TestRateLimitUtils(unittest.TestCase):
 
     def test_fixed_window_rejects_over_limit(self):
         fw = FixedWindow(limit=2, window=10.0)
-        fw.allow(); fw.allow()
+        fw.allow()
+        fw.allow()
         self.assertFalse(fw.allow())
 
     def test_fixed_window_remaining(self):
@@ -3141,7 +3143,8 @@ class TestRateLimitUtils(unittest.TestCase):
 
     def test_sliding_window_rejects_over_limit(self):
         sw = SlidingWindow(limit=2, window=10.0)
-        sw.allow(); sw.allow()
+        sw.allow()
+        sw.allow()
         self.assertFalse(sw.allow())
 
     def test_sliding_window_repr(self):
@@ -3154,7 +3157,8 @@ class TestRateLimitUtils(unittest.TestCase):
 
     def test_token_bucket_rejects_when_empty(self):
         tb = TokenBucket(capacity=2, rate=0.1)
-        tb.allow(); tb.allow()
+        tb.allow()
+        tb.allow()
         self.assertFalse(tb.allow())
 
     def test_token_bucket_tokens_property(self):
@@ -3170,7 +3174,8 @@ class TestRateLimitUtils(unittest.TestCase):
 
     def test_leaky_bucket_rejects_when_full(self):
         lb = LeakyBucket(capacity=2, rate=0.01)
-        lb.allow(); lb.allow()
+        lb.allow()
+        lb.allow()
         self.assertFalse(lb.allow())
 
     def test_leaky_bucket_repr(self):
@@ -3331,7 +3336,7 @@ class TestEventBus(unittest.TestCase):
         self.assertEqual(received, [1])
 
     def test_unsubscribe(self):
-        fn = lambda e: None
+        def fn(e): pass
         self.bus.subscribe("x", fn)
         removed = self.bus.unsubscribe("x", fn)
         self.assertTrue(removed)
@@ -3382,7 +3387,8 @@ class TestEventBus(unittest.TestCase):
     def test_wait_for(self):
         import threading
         def trigger():
-            import time; time.sleep(0.05)
+            import time
+            time.sleep(0.05)
             self.bus.publish("ready", 99)
         threading.Thread(target=trigger, daemon=True).start()
         event = self.bus.wait_for("ready", timeout=2.0)
@@ -3443,13 +3449,11 @@ class TestContextUtils(unittest.TestCase):
                 raise ValueError("not suppressed")
 
     def test_temp_dir_creates_path(self):
-        from pathlib import Path
         with temp_dir() as d:
             self.assertTrue(d.exists())
             (d / "test.txt").write_text("hello")
 
     def test_temp_dir_cleaned_up(self):
-        from pathlib import Path
         with temp_dir() as d:
             path = d
         self.assertFalse(path.exists())

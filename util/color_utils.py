@@ -15,12 +15,12 @@ def rgb_to_hex(r: int, g: int, b: int) -> str:
 
 
 def rgb_to_hsl(r: int, g: int, b: int) -> tuple[float, float, float]:
-    h, l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
-    return round(h * 360, 2), round(s * 100, 2), round(l * 100, 2)
+    h, lightness, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+    return round(h * 360, 2), round(s * 100, 2), round(lightness * 100, 2)
 
 
-def hsl_to_rgb(h: float, s: float, l: float) -> tuple[int, int, int]:
-    r, g, b = colorsys.hls_to_rgb(h / 360, l / 100, s / 100)
+def hsl_to_rgb(h: float, s: float, lightness: float) -> tuple[int, int, int]:
+    r, g, b = colorsys.hls_to_rgb(h / 360, lightness / 100, s / 100)
     return round(r * 255), round(g * 255), round(b * 255)
 
 
@@ -51,14 +51,14 @@ def contrast_color(hex_color: str) -> str:
 
 def lighten(hex_color: str, amount: float = 10.0) -> str:
     r, g, b = hex_to_rgb(hex_color)
-    h, s, l = rgb_to_hsl(r, g, b)
-    return rgb_to_hex(*hsl_to_rgb(h, s, min(l + amount, 100)))
+    h, s, lightness = rgb_to_hsl(r, g, b)
+    return rgb_to_hex(*hsl_to_rgb(h, s, min(lightness + amount, 100)))
 
 
 def darken(hex_color: str, amount: float = 10.0) -> str:
     r, g, b = hex_to_rgb(hex_color)
-    h, s, l = rgb_to_hsl(r, g, b)
-    return rgb_to_hex(*hsl_to_rgb(h, s, max(l - amount, 0)))
+    h, s, lightness = rgb_to_hsl(r, g, b)
+    return rgb_to_hex(*hsl_to_rgb(h, s, max(lightness - amount, 0)))
 
 
 def mix(hex1: str, hex2: str, ratio: float = 0.5) -> str:
@@ -72,8 +72,8 @@ def mix(hex1: str, hex2: str, ratio: float = 0.5) -> str:
 
 def complementary(hex_color: str) -> str:
     r, g, b = hex_to_rgb(hex_color)
-    h, s, l = rgb_to_hsl(r, g, b)
-    return rgb_to_hex(*hsl_to_rgb((h + 180) % 360, s, l))
+    h, s, lightness = rgb_to_hsl(r, g, b)
+    return rgb_to_hex(*hsl_to_rgb((h + 180) % 360, s, lightness))
 
 
 def random_color() -> str:
@@ -82,19 +82,19 @@ def random_color() -> str:
 
 def analogous(hex_color: str, angle: float = 30.0) -> tuple[str, str]:
     r, g, b = hex_to_rgb(hex_color)
-    h, s, l = rgb_to_hsl(r, g, b)
+    h, s, lightness = rgb_to_hsl(r, g, b)
     return (
-        rgb_to_hex(*hsl_to_rgb((h - angle) % 360, s, l)),
-        rgb_to_hex(*hsl_to_rgb((h + angle) % 360, s, l)),
+        rgb_to_hex(*hsl_to_rgb((h - angle) % 360, s, lightness)),
+        rgb_to_hex(*hsl_to_rgb((h + angle) % 360, s, lightness)),
     )
 
 
 def triadic(hex_color: str) -> tuple[str, str]:
     r, g, b = hex_to_rgb(hex_color)
-    h, s, l = rgb_to_hsl(r, g, b)
+    h, s, lightness = rgb_to_hsl(r, g, b)
     return (
-        rgb_to_hex(*hsl_to_rgb((h + 120) % 360, s, l)),
-        rgb_to_hex(*hsl_to_rgb((h + 240) % 360, s, l)),
+        rgb_to_hex(*hsl_to_rgb((h + 120) % 360, s, lightness)),
+        rgb_to_hex(*hsl_to_rgb((h + 240) % 360, s, lightness)),
     )
 
 
