@@ -98,6 +98,18 @@ from util.circuit_breaker_utils import (CircuitBreaker, CircuitBreakerOpen,
 from util.event_bus_utils import Event, EventBus
 from util.pipeline_utils import Pipeline, compose as pipe_compose, branch
 from util.context_utils import suppress, temp_dir, temp_env, ManagedResource
+from util.csv_utils import (csv_to_string, string_to_csv, col_values, select_cols,
+                             filter_rows, sort_rows, transform_col, rename_col,
+                             drop_col, deduplicate, write_csv, read_csv,
+                             write_csv_rows, read_csv_rows, get_headers, count_rows,
+                             append_row)
+from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as iter_flatten,
+                                  deep_flatten, interleave, roundrobin,
+                                  first, last, nth, count_items, all_equal,
+                                  minmax, accumulate, zip_longest,
+                                  product, permutations, combinations,
+                                  combinations_with_replacement, Peekable)
+from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
 from util.websocket_utils import (WebSocketError, WebSocketClosed, Frame,
                                    WebSocketClient, OP_TEXT, OP_BINARY,
                                    OP_CLOSE, OP_PING, OP_PONG, _encode_frame)
@@ -3476,6 +3488,298 @@ class TestContextUtils(unittest.TestCase):
     def test_managed_resource_repr(self):
         res = ManagedResource("cache")
         self.assertIn("cache", repr(res))
+
+
+class TestCsvUtils(unittest.TestCase):
+    ROWS = [
+        {"name": "Alice", "age": "30", "city": "Warsaw"},
+        {"name": "Bob",   "age": "25", "city": "Berlin"},
+        {"name": "Carol", "age": "35", "city": "Paris"},
+        {"name": "Dave",  "age": "25", "city": "Warsaw"},
+    ]
+
+    def test_csv_to_string_has_header(self):
+        s = csv_to_string(self.ROWS)
+        self.assertIn("name", s)
+        self.assertIn("Alice", s)
+
+    def test_string_to_csv_round_trip(self):
+        s = csv_to_string(self.ROWS)
+        result = string_to_csv(s)
+        self.assertEqual(result[0]["name"], "Alice")
+        self.assertEqual(len(result), 4)
+
+    def test_csv_to_string_empty(self):
+        self.assertEqual(csv_to_string([]), "")
+
+    def test_col_values(self):
+        self.assertEqual(col_values(self.ROWS, "name"), ["Alice", "Bob", "Carol", "Dave"])
+
+    def test_col_values_missing_key(self):
+        rows = [{"a": 1}, {"b": 2}]
+        self.assertEqual(col_values(rows, "a"), [1])
+
+    def test_select_cols(self):
+        result = select_cols(self.ROWS, ["name", "city"])
+        self.assertEqual(list(result[0].keys()), ["name", "city"])
+
+    def test_filter_rows(self):
+        result = filter_rows(self.ROWS, lambda r: r["age"] == "25")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "Bob")
+
+    def test_sort_rows_ascending(self):
+        result = sort_rows(self.ROWS, "name")
+        self.assertEqual(result[0]["name"], "Alice")
+        self.assertEqual(result[-1]["name"], "Dave")
+
+    def test_sort_rows_descending(self):
+        result = sort_rows(self.ROWS, "name", reverse=True)
+        self.assertEqual(result[0]["name"], "Dave")
+
+    def test_transform_col(self):
+        result = transform_col(self.ROWS, "age", int)
+        self.assertEqual(result[0]["age"], 30)
+
+    def test_rename_col(self):
+        result = rename_col(self.ROWS, "city", "location")
+        self.assertIn("location", result[0])
+        self.assertNotIn("city", result[0])
+
+    def test_drop_col(self):
+        result = drop_col(self.ROWS, "age")
+        self.assertNotIn("age", result[0])
+        self.assertIn("name", result[0])
+
+    def test_deduplicate(self):
+        result = deduplicate(self.ROWS, "age")
+        ages = col_values(result, "age")
+        self.assertEqual(len(ages), len(set(ages)))
+
+    def test_write_and_read_csv(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            write_csv(tmp, self.ROWS)
+            rows = read_csv(tmp)
+            self.assertEqual(len(rows), 4)
+            self.assertEqual(rows[0]["name"], "Alice")
+        finally:
+            os.unlink(tmp)
+
+    def test_write_csv_empty_does_nothing(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as f:
+            tmp = f.name
+        try:
+            write_csv(tmp, [])
+            self.assertEqual(os.path.getsize(tmp), 0)
+        finally:
+            os.unlink(tmp)
+
+    def test_get_headers(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            write_csv(tmp, self.ROWS)
+            self.assertEqual(get_headers(tmp), ["name", "age", "city"])
+        finally:
+            os.unlink(tmp)
+
+    def test_count_rows(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            write_csv(tmp, self.ROWS)
+            self.assertEqual(count_rows(tmp), 4)
+        finally:
+            os.unlink(tmp)
+
+    def test_write_and_read_csv_rows(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            write_csv_rows(tmp, [["a", "b"], ["1", "2"]])
+            rows = read_csv_rows(tmp)
+            self.assertEqual(rows[0], ["a", "b"])
+        finally:
+            os.unlink(tmp)
+
+    def test_append_row_dict(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            tmp = f.name
+        try:
+            append_row(tmp, {"x": "1", "y": "2"})
+            content = open(tmp, encoding="utf-8").read()
+            self.assertIn("1", content)
+        finally:
+            os.unlink(tmp)
+
+
+class TestIteratorUtils(unittest.TestCase):
+    def test_chunks_even(self):
+        self.assertEqual(list(chunks([1, 2, 3, 4], 2)), [[1, 2], [3, 4]])
+
+    def test_chunks_uneven(self):
+        result = list(chunks([1, 2, 3, 4, 5], 2))
+        self.assertEqual(result[-1], [5])
+
+    def test_chunks_empty(self):
+        self.assertEqual(list(chunks([], 3)), [])
+
+    def test_sliding_window(self):
+        self.assertEqual(list(sliding_window([1, 2, 3, 4], 2)),
+                         [(1, 2), (2, 3), (3, 4)])
+
+    def test_sliding_window_size_equals_len(self):
+        self.assertEqual(list(sliding_window([1, 2, 3], 3)), [(1, 2, 3)])
+
+    def test_pairwise(self):
+        self.assertEqual(list(pairwise([1, 2, 3])), [(1, 2), (2, 3)])
+
+    def test_flatten(self):
+        self.assertEqual(iter_flatten([[1, 2], [3], [4, 5]]), [1, 2, 3, 4, 5])
+
+    def test_deep_flatten(self):
+        self.assertEqual(deep_flatten([1, [2, [3, [4]]], 5]), [1, 2, 3, 4, 5])
+
+    def test_deep_flatten_mixed(self):
+        self.assertEqual(deep_flatten([1, (2, 3), {4}]), [1, 2, 3, 4])
+
+    def test_interleave(self):
+        self.assertEqual(interleave([1, 3], [2, 4]), [1, 2, 3, 4])
+
+    def test_roundrobin(self):
+        self.assertEqual(roundrobin("AB", "CD"), ["A", "C", "B", "D"])
+
+    def test_first(self):
+        self.assertEqual(first([10, 20, 30]), 10)
+
+    def test_first_empty_default(self):
+        self.assertIsNone(first([]))
+
+    def test_last(self):
+        self.assertEqual(last([10, 20, 30]), 30)
+
+    def test_last_empty_default(self):
+        self.assertIsNone(last([]))
+
+    def test_nth(self):
+        self.assertEqual(nth(iter([10, 20, 30]), 1), 20)
+
+    def test_nth_out_of_range(self):
+        self.assertIsNone(nth(iter([1, 2]), 5))
+
+    def test_count_items(self):
+        self.assertEqual(count_items(range(7)), 7)
+
+    def test_all_equal_true(self):
+        self.assertTrue(all_equal([1, 1, 1]))
+
+    def test_all_equal_false(self):
+        self.assertFalse(all_equal([1, 2, 1]))
+
+    def test_all_equal_single(self):
+        self.assertTrue(all_equal([42]))
+
+    def test_minmax(self):
+        self.assertEqual(minmax([3, 1, 4, 1, 5, 9, 2]), (1, 9))
+
+    def test_accumulate(self):
+        self.assertEqual(accumulate([1, 2, 3, 4]), [1, 3, 6, 10])
+
+    def test_zip_longest(self):
+        result = zip_longest([1, 2, 3], [4, 5], fillvalue=0)
+        self.assertEqual(result, [(1, 4), (2, 5), (3, 0)])
+
+    def test_product(self):
+        self.assertEqual(product([1, 2], ["a", "b"]),
+                         [(1, "a"), (1, "b"), (2, "a"), (2, "b")])
+
+    def test_permutations(self):
+        self.assertEqual(len(permutations([1, 2, 3], 2)), 6)
+
+    def test_combinations(self):
+        self.assertEqual(combinations([1, 2, 3], 2), [(1, 2), (1, 3), (2, 3)])
+
+    def test_combinations_with_replacement(self):
+        result = combinations_with_replacement([1, 2], 2)
+        self.assertIn((1, 1), result)
+
+    def test_peekable_peek(self):
+        p = Peekable([1, 2, 3])
+        self.assertEqual(p.peek(), 1)
+        self.assertEqual(next(p), 1)
+
+    def test_peekable_exhausted(self):
+        p = Peekable([])
+        self.assertIsNone(p.peek())
+
+    def test_peekable_iteration(self):
+        self.assertEqual(list(Peekable([10, 20, 30])), [10, 20, 30])
+
+
+class TestTemplateUtils(unittest.TestCase):
+    def test_variable_substitution(self):
+        self.assertEqual(render("Hello, {{ name }}!", {"name": "World"}), "Hello, World!")
+
+    def test_missing_variable_renders_empty(self):
+        self.assertEqual(render("{{ missing }}", {}), "")
+
+    def test_filter_upper(self):
+        self.assertEqual(render("{{ x | upper }}", {"x": "hello"}), "HELLO")
+
+    def test_filter_lower(self):
+        self.assertEqual(render("{{ x | lower }}", {"x": "HELLO"}), "hello")
+
+    def test_filter_title(self):
+        self.assertEqual(render("{{ x | title }}", {"x": "hello world"}), "Hello World")
+
+    def test_filter_escape(self):
+        result = render("{{ x | escape }}", {"x": "<b>bold</b>"})
+        self.assertIn("&lt;", result)
+
+    def test_filter_length(self):
+        self.assertEqual(render("{{ x | length }}", {"x": [1, 2, 3]}), "3")
+
+    def test_if_true_branch(self):
+        t = "{% if flag %}yes{% endif %}"
+        self.assertEqual(render(t, {"flag": True}), "yes")
+
+    def test_if_false_branch(self):
+        t = "{% if flag %}yes{% else %}no{% endif %}"
+        self.assertEqual(render(t, {"flag": False}), "no")
+
+    def test_if_elif(self):
+        t = "{% if x > 10 %}big{% elif x > 5 %}medium{% else %}small{% endif %}"
+        self.assertEqual(render(t, {"x": 7}), "medium")
+
+    def test_for_loop(self):
+        t = "{% for item in items %}{{ item }} {% endfor %}"
+        self.assertEqual(render(t, {"items": ["a", "b", "c"]}), "a b c ")
+
+    def test_comment_ignored(self):
+        self.assertEqual(render("hi {# comment #} there", {}), "hi  there")
+
+    def test_render_safe_substitution(self):
+        self.assertEqual(render_safe("{{ x }}", {"x": "ok"}), "ok")
+
+    def test_render_safe_missing_renders_empty(self):
+        self.assertEqual(render_safe("{{ missing }}", {}), "")
+
+    def test_escape_html(self):
+        self.assertEqual(escape_html("<script>"), "&lt;script&gt;")
+
+    def test_register_filter(self):
+        register_filter("shout", lambda s: s.upper() + "!")
+        self.assertEqual(render("{{ msg | shout }}", {"msg": "hi"}), "HI!")
+
+    def test_template_class_render(self):
+        t = Template("Dear {{ name }}")
+        self.assertEqual(t.render({"name": "Alice"}), "Dear Alice")
+
+    def test_template_class_no_context(self):
+        t = Template("static text")
+        self.assertEqual(t.render(), "static text")
 
 
 if __name__ == "__main__":
