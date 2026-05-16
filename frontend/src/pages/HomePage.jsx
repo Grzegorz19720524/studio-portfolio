@@ -13,7 +13,7 @@ export default function HomePage() {
       getProducts({ ordering: '-created_at', page_size: 3 }),
       getCategories(),
     ]).then(([p, c]) => {
-      const prods = p.data.results || []
+      const prods = (p.data.results || []).slice(0, 3)
       const cats = c.data.results || []
       setProducts(prods)
       setCategories(cats)
