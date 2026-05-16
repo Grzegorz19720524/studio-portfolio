@@ -4,7 +4,7 @@ from .serializers import CategorySerializer, ProductSerializer, ProductWriteSeri
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
+    queryset = Category.objects.order_by("name")
     serializer_class = CategorySerializer
     lookup_field = "slug"
 

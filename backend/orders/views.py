@@ -23,9 +23,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Order.objects.select_related("user").prefetch_related("items__product")
+        qs = Order.objects.select_related("user").prefetch_related("items__product").order_by("-created_at")
         if user.is_staff:
-            return qs.all()
+            return qs
         return qs.filter(user=user)
 
     def get_serializer_class(self):
