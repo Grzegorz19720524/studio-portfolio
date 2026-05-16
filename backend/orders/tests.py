@@ -133,6 +133,14 @@ class TestOrderStatus:
         )
         assert response.status_code == 403
 
+    def test_anonymous_cannot_change_status(self, api_client, order):
+        response = api_client.patch(
+            f"/api/orders/{order.pk}/status/",
+            {"status": "confirmed"},
+            format="json",
+        )
+        assert response.status_code == 403
+
     def test_invalid_status_rejected(self, admin_client, order):
         response = admin_client.patch(
             f"/api/orders/{order.pk}/status/",
@@ -140,6 +148,37 @@ class TestOrderStatus:
             format="json",
         )
         assert response.status_code == 400
+
+    @pytest.mark.parametrize("new_status", [
+        "pending", "confirmed", "in_progress", "completed", "cancelled",
+    ])
+    def test_all_valid_statuses_accepted(self, admin_client, order, new_status):
+        response = admin_client.patch(
+            f"/api/orders/{order.pk}/status/",
+            {"status": new_status},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.data["status"] == new_status
+
+    def test_status_display_returned_after_change(self, admin_client, order):
+        response = admin_client.patch(
+            f"/api/orders/{order.pk}/status/",
+            {"status": "in_progress"},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert "status_display" in response.data
+        assert response.data["status_display"] != ""
+
+    def test_status_change_updates_db(self, admin_client, order):
+        admin_client.patch(
+            f"/api/orders/{order.pk}/status/",
+            {"status": "completed"},
+            format="json",
+        )
+        order.refresh_from_db()
+        assert order.status == "completed"
 
 
 @pytest.mark.django_db
