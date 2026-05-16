@@ -140,3 +140,164 @@ class TestProductAPI:
         assert response.status_code == 200
         prices = [p["price"] for p in response.data["results"]]
         assert prices == sorted(prices)
+
+    def test_create_product_forbidden_anonymous(self, api_client, category):
+        data = {"category": category.pk, "name": "X", "slug": "x", "price": "100.00"}
+        response = api_client.post(self.url, data)
+        assert response.status_code == 403
+
+    def test_delete_product_forbidden_for_user(self, user_client, product):
+        response = user_client.delete(f"{self.url}{product.slug}/")
+        assert response.status_code == 403
+
+    def test_delete_product_forbidden_anonymous(self, api_client, product):
+        response = api_client.delete(f"{self.url}{product.slug}/")
+        assert response.status_code == 403
+
+    def test_delete_nonexistent_product(self, admin_client):
+        response = admin_client.delete(f"{self.url}nie-istnieje/")
+        assert response.status_code == 404
+
+    def test_retrieve_inactive_product_anonymous(self, api_client, inactive_product):
+        response = api_client.get(f"{self.url}{inactive_product.slug}/")
+        assert response.status_code == 404
+
+    def test_admin_can_retrieve_inactive_product(self, admin_client, inactive_product):
+        response = admin_client.get(f"{self.url}{inactive_product.slug}/")
+        assert response.status_code == 200
+        assert response.data["is_active"] is False
+
+    def test_update_product_forbidden_for_user(self, user_client, product):
+        response = user_client.patch(f"{self.url}{product.slug}/", {"price": "9999.00"})
+        assert response.status_code == 403
+
+    def test_update_product_forbidden_anonymous(self, api_client, product):
+        response = api_client.patch(f"{self.url}{product.slug}/", {"price": "9999.00"})
+        assert response.status_code == 403
+
+
+@pytest.mark.django_db
+class TestAdminProductCRUD:
+    """Testy operacji CRUD wykonywanych z poziomu zakładki Produkty w panelu admina."""
+
+    url = "/api/products/"
+
+    def test_create_with_description(self, admin_client, category):
+        data = {
+            "category": category.pk,
+            "name": "Pełny produkt",
+            "slug": "pelny-produkt",
+            "description": "Szczegółowy opis produktu.",
+            "price": "1200.00",
+            "is_active": True,
+        }
+        response = admin_client.post(self.url, data)
+        assert response.status_code == 201
+        assert response.data["description"] == "Szczegółowy opis produktu."
+
+    def test_create_inactive_product(self, admin_client, category):
+        data = {
+            "category": category.pk,
+            "name": "Ukryty produkt",
+            "slug": "ukryty-produkt",
+            "price": "500.00",
+            "is_active": False,
+        }
+        response = admin_client.post(self.url, data)
+        assert response.status_code == 201
+        assert response.data["is_active"] is False
+
+    def test_create_duplicate_slug_rejected(self, admin_client, category, product):
+        data = {
+            "category": category.pk,
+            "name": "Inny produkt",
+            "slug": product.slug,
+            "price": "999.00",
+        }
+        response = admin_client.post(self.url, data)
+        assert response.status_code == 400
+
+    def test_create_missing_required_fields(self, admin_client, category):
+        response = admin_client.post(self.url, {"category": category.pk})
+        assert response.status_code == 400
+
+    def test_toggle_active_to_inactive(self, admin_client, product):
+        assert product.is_active is True
+        response = admin_client.patch(f"{self.url}{product.slug}/", {"is_active": False})
+        assert response.status_code == 200
+        assert response.data["is_active"] is False
+        product.refresh_from_db()
+        assert product.is_active is False
+
+    def test_toggle_inactive_to_active(self, admin_client, inactive_product):
+        assert inactive_product.is_active is False
+        response = admin_client.patch(f"{self.url}{inactive_product.slug}/", {"is_active": True})
+        assert response.status_code == 200
+        assert response.data["is_active"] is True
+        inactive_product.refresh_from_db()
+        assert inactive_product.is_active is True
+
+    def test_update_price(self, admin_client, product):
+        response = admin_client.patch(f"{self.url}{product.slug}/", {"price": "2500.00"})
+        assert response.status_code == 200
+        assert response.data["price"] == "2500.00"
+        product.refresh_from_db()
+        assert str(product.price) == "2500.00"
+
+    def test_update_name(self, admin_client, product):
+        response = admin_client.patch(f"{self.url}{product.slug}/", {"name": "Zmieniona nazwa"})
+        assert response.status_code == 200
+        assert response.data["name"] == "Zmieniona nazwa"
+
+    def test_update_category(self, admin_client, product, db):
+        new_cat = Category.objects.create(name="Nowa kategoria", slug="nowa-kategoria")
+        response = admin_client.patch(f"{self.url}{product.slug}/", {"category": new_cat.pk})
+        assert response.status_code == 200
+        product.refresh_from_db()
+        assert product.category == new_cat
+
+    def test_update_slug(self, admin_client, product):
+        response = admin_client.patch(f"{self.url}{product.slug}/", {"slug": "nowy-slug"})
+        assert response.status_code == 200
+        assert response.data["slug"] == "nowy-slug"
+        assert Product.objects.filter(slug="nowy-slug").exists()
+        assert not Product.objects.filter(slug=product.slug).exists()
+
+    def test_delete_removes_from_db(self, admin_client, product):
+        response = admin_client.delete(f"{self.url}{product.slug}/")
+        assert response.status_code == 204
+        assert not Product.objects.filter(pk=product.pk).exists()
+
+    def test_retrieve_contains_category_name(self, admin_client, category, product):
+        response = admin_client.get(f"{self.url}{product.slug}/")
+        assert response.status_code == 200
+        assert "category_name" in response.data
+        assert response.data["category_name"] == category.name
+
+
+@pytest.mark.django_db
+class TestCategoryAdminCRUD:
+    """Testy operacji admina na kategoriach (używane w select formularza produktu)."""
+
+    url = "/api/categories/"
+
+    def test_update_category_admin(self, admin_client, category):
+        response = admin_client.patch(f"{self.url}{category.slug}/", {"name": "Zmieniona"})
+        assert response.status_code == 200
+        assert response.data["name"] == "Zmieniona"
+
+    def test_update_category_forbidden_for_user(self, user_client, category):
+        response = user_client.patch(f"{self.url}{category.slug}/", {"name": "Zmieniona"})
+        assert response.status_code == 403
+
+    def test_update_category_forbidden_anonymous(self, api_client, category):
+        response = api_client.patch(f"{self.url}{category.slug}/", {"name": "Zmieniona"})
+        assert response.status_code == 403
+
+    def test_retrieve_nonexistent_category(self, api_client):
+        response = api_client.get(f"{self.url}nie-istnieje/")
+        assert response.status_code == 404
+
+    def test_create_category_duplicate_slug(self, admin_client, category):
+        response = admin_client.post(self.url, {"name": "Inna", "slug": category.slug})
+        assert response.status_code == 400
