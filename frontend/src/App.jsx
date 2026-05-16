@@ -12,6 +12,7 @@ import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
 import ContactPage from './pages/ContactPage'
 import ProfilePage from './pages/ProfilePage'
+import DashboardPage from './pages/DashboardPage'
 
 export default function App() {
   const { init } = useAuthStore()
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
             <Route path="/orders/:id" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           </Routes>
         </main>
