@@ -10,6 +10,7 @@ export const getContactMessages = () => api.get('/contact/')
 export const markMessageRead = (id, is_read) => api.patch(`/contact/${id}/mark-read/`, { is_read })
 export const deleteMessage = (id) => api.delete(`/contact/${id}/`)
 
+export const getAdminStats = () => api.get('/admin/stats/')
 export const getAdminProducts = () => api.get('/products/', { params: { ordering: '-created_at', page_size: 100 } })
 export const getAdminCategories = () => api.get('/categories/')
 export const createProduct = (data) => api.post('/products/', data)

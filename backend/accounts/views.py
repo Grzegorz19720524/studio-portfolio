@@ -80,3 +80,46 @@ class AdminUserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.order_by("-created_at")
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAdminUser]
+
+
+class AdminStatsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        from django.utils import timezone
+        from django.db.models import Sum, Count
+        from orders.models import Order
+        from products.models import Product
+        from contact.models import ContactMessage
+
+        thirty_days_ago = timezone.now() - timezone.timedelta(days=30)
+
+        order_qs = Order.objects.all()
+        order_status_counts = dict(
+            order_qs.values_list("status").annotate(cnt=Count("id")).values_list("status", "cnt")
+        )
+        revenue = order_qs.filter(status="completed").aggregate(total=Sum("total"))["total"] or 0
+
+        return Response({
+            "users": {
+                "total": User.objects.count(),
+                "active": User.objects.filter(is_active=True).count(),
+                "staff": User.objects.filter(is_staff=True).count(),
+                "new_30d": User.objects.filter(created_at__gte=thirty_days_ago).count(),
+            },
+            "orders": {
+                "total": order_qs.count(),
+                "new_30d": order_qs.filter(created_at__gte=thirty_days_ago).count(),
+                "by_status": order_status_counts,
+                "revenue_completed": str(revenue),
+            },
+            "products": {
+                "total": Product.objects.count(),
+                "active": Product.objects.filter(is_active=True).count(),
+                "inactive": Product.objects.filter(is_active=False).count(),
+            },
+            "messages": {
+                "total": ContactMessage.objects.count(),
+                "unread": ContactMessage.objects.filter(is_read=False).count(),
+            },
+        })

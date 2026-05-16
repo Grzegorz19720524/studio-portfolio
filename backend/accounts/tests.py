@@ -205,6 +205,105 @@ class TestAdminUsers:
 
 
 @pytest.mark.django_db
+class TestAdminStats:
+    url = "/api/admin/stats/"
+
+    def test_admin_can_access(self, admin_client):
+        response = admin_client.get(self.url)
+        assert response.status_code == 200
+
+    def test_regular_user_forbidden(self, user_client):
+        response = user_client.get(self.url)
+        assert response.status_code == 403
+
+    def test_anonymous_forbidden(self, api_client):
+        response = api_client.get(self.url)
+        assert response.status_code == 403
+
+    def test_response_structure(self, admin_client):
+        response = admin_client.get(self.url)
+        data = response.data
+        assert "users" in data
+        assert "orders" in data
+        assert "products" in data
+        assert "messages" in data
+
+    def test_users_section(self, admin_client, regular_user):
+        response = admin_client.get(self.url)
+        users = response.data["users"]
+        assert "total" in users
+        assert "active" in users
+        assert "staff" in users
+        assert "new_30d" in users
+        assert users["total"] >= 2  # admin + regular_user
+
+    def test_orders_section(self, admin_client):
+        response = admin_client.get(self.url)
+        orders = response.data["orders"]
+        assert "total" in orders
+        assert "new_30d" in orders
+        assert "by_status" in orders
+        assert "revenue_completed" in orders
+
+    def test_products_section(self, admin_client):
+        response = admin_client.get(self.url)
+        products = response.data["products"]
+        assert "total" in products
+        assert "active" in products
+        assert "inactive" in products
+
+    def test_messages_section(self, admin_client):
+        response = admin_client.get(self.url)
+        messages = response.data["messages"]
+        assert "total" in messages
+        assert "unread" in messages
+
+    def test_counts_reflect_db_state(self, admin_client, db):
+        from django.contrib.auth import get_user_model
+        from orders.models import Order, OrderItem
+        from products.models import Category, Product
+        from contact.models import ContactMessage
+
+        User = get_user_model()
+        u = User.objects.create_user(username="stat_user", password="pass123!")
+        cat = Category.objects.create(name="Kat", slug="kat")
+        prod = Product.objects.create(name="P", slug="p", price="100.00", category=cat, is_active=True)
+        order = Order.objects.create(user=u, status="completed")
+        OrderItem.objects.create(order=order, product=prod, quantity=1, unit_price=prod.price)
+        order.recalculate_total()
+        ContactMessage.objects.create(name="X", email="x@x.pl", subject="S", message="M", is_read=False)
+
+        response = admin_client.get(self.url)
+        data = response.data
+        assert data["orders"]["total"] >= 1
+        assert data["orders"]["by_status"].get("completed", 0) >= 1
+        assert float(data["orders"]["revenue_completed"]) >= 100.0
+        assert data["products"]["total"] >= 1
+        assert data["messages"]["unread"] >= 1
+
+    def test_active_inactive_product_counts(self, admin_client, db):
+        from products.models import Category, Product
+        cat = Category.objects.create(name="C", slug="c")
+        Product.objects.create(name="Aktywny", slug="aktywny", price="1.00", category=cat, is_active=True)
+        Product.objects.create(name="Ukryty", slug="ukryty", price="1.00", category=cat, is_active=False)
+
+        response = admin_client.get(self.url)
+        products = response.data["products"]
+        assert products["active"] >= 1
+        assert products["inactive"] >= 1
+
+    def test_unread_messages_count(self, admin_client, db):
+        from contact.models import ContactMessage
+        ContactMessage.objects.create(name="A", email="a@a.pl", subject="S", message="M", is_read=False)
+        ContactMessage.objects.create(name="B", email="b@b.pl", subject="S", message="M", is_read=True)
+
+        response = admin_client.get(self.url)
+        msgs = response.data["messages"]
+        assert msgs["unread"] >= 1
+        assert msgs["total"] >= 2
+
+
+@pytest.mark.django_db
 class TestUserSerializerIsStaff:
     """is_staff jest teraz zwracane przez /api/auth/me/ i /api/auth/register/."""
 

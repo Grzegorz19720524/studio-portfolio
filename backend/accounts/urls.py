@@ -7,6 +7,7 @@ from .views import (
     MeView,
     ChangePasswordView,
     AdminUserViewSet,
+    AdminStatsView,
 )
 
 router = DefaultRouter()
@@ -18,5 +19,6 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/me/", MeView.as_view(), name="me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("admin/stats/", AdminStatsView.as_view(), name="admin-stats"),
     *router.urls,
 ]
