@@ -615,8 +615,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          <Field label="Kategoria" error={errors.category}>
+          <Field label="Kategoria" error={errors.category} htmlFor="pm-category">
             <select
+              id="pm-category"
               value={form.category}
               onChange={(e) => set('category', e.target.value)}
               className="input"
@@ -629,8 +630,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
             </select>
           </Field>
 
-          <Field label="Nazwa" error={errors.name}>
+          <Field label="Nazwa" error={errors.name} htmlFor="pm-name">
             <input
+              id="pm-name"
               type="text"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
@@ -639,8 +641,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
             />
           </Field>
 
-          <Field label="Slug" error={errors.slug}>
+          <Field label="Slug" error={errors.slug} htmlFor="pm-slug">
             <input
+              id="pm-slug"
               type="text"
               value={form.slug}
               onChange={(e) => set('slug', e.target.value)}
@@ -649,8 +652,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
             />
           </Field>
 
-          <Field label="Opis" error={errors.description}>
+          <Field label="Opis" error={errors.description} htmlFor="pm-description">
             <textarea
+              id="pm-description"
               value={form.description}
               onChange={(e) => set('description', e.target.value)}
               rows={4}
@@ -658,8 +662,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
             />
           </Field>
 
-          <Field label="Cena (zł)" error={errors.price}>
+          <Field label="Cena (zł)" error={errors.price} htmlFor="pm-price">
             <input
+              id="pm-price"
               type="number"
               step="0.01"
               min="0"
@@ -706,10 +711,10 @@ function ProductModal({ product, categories, onSave, onClose }) {
   )
 }
 
-function Field({ label, error, children }) {
+function Field({ label, error, children, htmlFor }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {children}
       {error && <p className="text-red-600 text-xs mt-1">{Array.isArray(error) ? error[0] : error}</p>}
     </div>
