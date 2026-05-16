@@ -301,3 +301,55 @@ class TestCategoryAdminCRUD:
     def test_create_category_duplicate_slug(self, admin_client, category):
         response = admin_client.post(self.url, {"name": "Inna", "slug": category.slug})
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestProductOrderingDescending:
+    url = "/api/products/"
+
+    def test_ordering_by_price_descending(self, api_client, category):
+        Product.objects.create(name="Tani", slug="tani", price="100.00", category=category, is_active=True)
+        Product.objects.create(name="Drogi", slug="drogi", price="9000.00", category=category, is_active=True)
+        Product.objects.create(name="Sredni", slug="sredni", price="500.00", category=category, is_active=True)
+        response = api_client.get(f"{self.url}?ordering=-price")
+        assert response.status_code == 200
+        prices = [p["price"] for p in response.data["results"]]
+        assert prices == sorted(prices, reverse=True)
+
+    def test_ordering_by_name_ascending(self, api_client, category):
+        Product.objects.create(name="Zebra", slug="zebra", price="100.00", category=category, is_active=True)
+        Product.objects.create(name="Alfa", slug="alfa", price="200.00", category=category, is_active=True)
+        response = api_client.get(f"{self.url}?ordering=name")
+        assert response.status_code == 200
+        names = [p["name"] for p in response.data["results"]]
+        assert names == sorted(names)
+
+
+@pytest.mark.django_db
+class TestProductPagination:
+    url = "/api/products/"
+
+    def test_list_response_has_results_key(self, api_client, product):
+        response = api_client.get(self.url)
+        assert response.status_code == 200
+        assert "results" in response.data
+        assert "count" in response.data
+
+    def test_category_list_has_results_key(self, api_client, category):
+        response = api_client.get("/api/categories/")
+        assert response.status_code == 200
+        assert "results" in response.data
+
+
+@pytest.mark.django_db
+class TestCategoryDefaultOrdering:
+    url = "/api/categories/"
+
+    def test_categories_ordered_by_name(self, api_client, db):
+        Category.objects.create(name="Zebra", slug="zebra")
+        Category.objects.create(name="Alfa", slug="alfa")
+        Category.objects.create(name="Marka", slug="marka")
+        response = api_client.get(self.url)
+        assert response.status_code == 200
+        names = [c["name"] for c in response.data["results"]]
+        assert names == sorted(names)
