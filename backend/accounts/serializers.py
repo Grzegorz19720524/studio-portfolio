@@ -30,8 +30,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "phone", "company", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "username", "email", "first_name", "last_name", "phone", "company", "is_staff", "created_at"]
+        read_only_fields = ["id", "is_staff", "created_at"]
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
