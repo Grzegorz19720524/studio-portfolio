@@ -3,9 +3,10 @@ import {
   getAdminUsers, updateAdminUser,
   getAdminOrders, setOrderStatus,
   getContactMessages, markMessageRead, deleteMessage,
+  getAdminProducts, getAdminCategories, createProduct, updateProduct, deleteProduct,
 } from '../api/admin'
 
-const TABS = ['Zamówienia', 'Użytkownicy', 'Wiadomości']
+const TABS = ['Zamówienia', 'Użytkownicy', 'Wiadomości', 'Produkty']
 
 const ORDER_STATUSES = [
   { value: 'pending',     label: 'Oczekuje' },
@@ -49,6 +50,7 @@ export default function AdminPage() {
       {tab === 0 && <OrdersTab />}
       {tab === 1 && <UsersTab />}
       {tab === 2 && <MessagesTab />}
+      {tab === 3 && <ProductsTab />}
     </div>
   )
 }
@@ -300,6 +302,296 @@ function MessagesTab() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/* ─── Products ─── */
+
+const EMPTY_FORM = { category: '', name: '', slug: '', description: '', price: '', is_active: true }
+
+function toSlug(name) {
+  return name
+    .toLowerCase()
+    .replace(/[ąà]/g, 'a').replace(/[ćč]/g, 'c').replace(/[ęè]/g, 'e')
+    .replace(/[łl]/g, 'l').replace(/ń/g, 'n').replace(/[óò]/g, 'o')
+    .replace(/[śš]/g, 's').replace(/[źżž]/g, 'z')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function ProductsTab() {
+  const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState(null) // null | 'create' | product object
+
+  const load = useCallback(() => {
+    setLoading(true)
+    Promise.all([getAdminProducts(), getAdminCategories()])
+      .then(([p, c]) => {
+        setProducts(p.data.results || [])
+        setCategories(c.data.results || [])
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleToggleActive = async (product) => {
+    await updateProduct(product.slug, { is_active: !product.is_active })
+    setProducts((prev) =>
+      prev.map((p) => p.slug === product.slug ? { ...p, is_active: !p.is_active } : p)
+    )
+  }
+
+  const handleDelete = async (product) => {
+    if (!window.confirm(`Usunąć produkt „${product.name}"?`)) return
+    await deleteProduct(product.slug)
+    setProducts((prev) => prev.filter((p) => p.slug !== product.slug))
+  }
+
+  const handleSave = async (formData, originalSlug) => {
+    if (originalSlug) {
+      const { data } = await updateProduct(originalSlug, formData)
+      setProducts((prev) => prev.map((p) => p.slug === originalSlug ? data : p))
+    } else {
+      const { data } = await createProduct(formData)
+      setProducts((prev) => [data, ...prev])
+    }
+    setModal(null)
+  }
+
+  if (loading) return <Spinner />
+
+  const active = products.filter((p) => p.is_active).length
+  const inactive = products.length - active
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">
+          Łącznie: {products.length} produktów · <span className="text-green-600">{active} aktywnych</span>
+          {inactive > 0 && <span className="text-gray-400"> · {inactive} nieaktywnych</span>}
+        </p>
+        <button
+          onClick={() => setModal('create')}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          + Nowy produkt
+        </button>
+      </div>
+
+      {products.length === 0 && <Empty text="Brak produktów." />}
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+              {['Nazwa', 'Kategoria', 'Cena', 'Status', 'Slug', ''].map((h) => (
+                <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {products.map((product) => (
+              <tr key={product.slug} className={`hover:bg-gray-50 transition-colors ${!product.is_active ? 'opacity-60' : ''}`}>
+                <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
+                <td className="px-4 py-3 text-gray-500">{product.category_name || '—'}</td>
+                <td className="px-4 py-3 text-gray-900 font-medium whitespace-nowrap">{product.price} zł</td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => handleToggleActive(product)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      product.is_active
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    {product.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-gray-400 font-mono text-xs">{product.slug}</td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setModal(product)}
+                      className="text-xs px-3 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors font-medium"
+                    >
+                      Edytuj
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product)}
+                      className="text-xs px-3 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium"
+                    >
+                      Usuń
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <ProductModal
+          product={modal === 'create' ? null : modal}
+          categories={categories}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ProductModal({ product, categories, onSave, onClose }) {
+  const [form, setForm] = useState(
+    product
+      ? {
+          category: product.category ?? '',
+          name: product.name,
+          slug: product.slug,
+          description: product.description,
+          price: product.price,
+          is_active: product.is_active,
+        }
+      : { ...EMPTY_FORM }
+  )
+  const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  const set = (field, value) => {
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'name' && !product) next.slug = toSlug(value)
+      return next
+    })
+    setErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setErrors({})
+    setSaving(true)
+    try {
+      await onSave(form, product?.slug ?? null)
+    } catch (err) {
+      setErrors(err.response?.data || { detail: 'Błąd zapisu.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-900">
+            {product ? 'Edytuj produkt' : 'Nowy produkt'}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <Field label="Kategoria" error={errors.category}>
+            <select
+              value={form.category}
+              onChange={(e) => set('category', e.target.value)}
+              className="input"
+              required
+            >
+              <option value="">— wybierz —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Nazwa" error={errors.name}>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              className="input"
+              required
+            />
+          </Field>
+
+          <Field label="Slug" error={errors.slug}>
+            <input
+              type="text"
+              value={form.slug}
+              onChange={(e) => set('slug', e.target.value)}
+              className="input font-mono text-sm"
+              required
+            />
+          </Field>
+
+          <Field label="Opis" error={errors.description}>
+            <textarea
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              rows={4}
+              className="input resize-none"
+            />
+          </Field>
+
+          <Field label="Cena (zł)" error={errors.price}>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.price}
+              onChange={(e) => set('price', e.target.value)}
+              className="input"
+              required
+            />
+          </Field>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={(e) => set('is_active', e.target.checked)}
+              className="w-4 h-4 rounded accent-indigo-600"
+            />
+            <span className="text-sm font-medium text-gray-700">Aktywny</span>
+          </label>
+
+          {errors.detail && (
+            <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">{errors.detail}</p>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Zapisywanie…' : 'Zapisz'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+            >
+              Anuluj
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, error, children }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {children}
+      {error && <p className="text-red-600 text-xs mt-1">{Array.isArray(error) ? error[0] : error}</p>}
     </div>
   )
 }
