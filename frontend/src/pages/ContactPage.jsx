@@ -23,8 +23,9 @@ export default function ContactPage() {
 
   const field = (name, label, type = 'text') => (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <input
+        id={name}
         type={type}
         value={form[name]}
         onChange={(e) => setForm({ ...form, [name]: e.target.value })}
@@ -55,8 +56,9 @@ export default function ContactPage() {
         {field('email', 'Email', 'email')}
         {field('subject', 'Temat')}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Wiadomość</label>
+          <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">Wiadomość</label>
           <textarea
+            id="message"
             value={form.message}
             onChange={(e) => setForm({ ...form, message: e.target.value })}
             rows={5}

@@ -29,8 +29,9 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nazwa użytkownika</label>
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">Nazwa użytkownika</label>
           <input
+            id="username"
             type="text"
             value={form.username}
             onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -39,8 +40,9 @@ export default function LoginPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Hasło</label>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Hasło</label>
           <input
+            id="password"
             type="password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
