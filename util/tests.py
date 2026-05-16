@@ -112,6 +112,9 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.network_utils import (get_local_ip, get_hostname, resolve_host, is_port_open,
+                                is_online, ping, get_free_port,
+                                parse_url as net_parse_url)
 from util.scheduler_utils import Task, Scheduler
 from util.thread_utils import (run_in_thread, run_parallel, join_all, current_thread_name,
                                active_count, timeout_call, AtomicInt, RWLock,
@@ -4100,6 +4103,129 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestNetworkUtils(unittest.TestCase):
+    # get_local_ip
+    def test_get_local_ip_returns_string(self):
+        self.assertIsInstance(get_local_ip(), str)
+
+    def test_get_local_ip_is_valid_format(self):
+        ip = get_local_ip()
+        parts = ip.split(".")
+        self.assertEqual(len(parts), 4)
+
+    # get_hostname
+    def test_get_hostname_returns_string(self):
+        self.assertIsInstance(get_hostname(), str)
+
+    def test_get_hostname_not_empty(self):
+        self.assertTrue(len(get_hostname()) > 0)
+
+    # resolve_host
+    def test_resolve_host_localhost(self):
+        result = resolve_host("localhost")
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, str)
+
+    def test_resolve_host_invalid_returns_none(self):
+        result = resolve_host("this.host.does.not.exist.invalid")
+        self.assertIsNone(result)
+
+    # is_port_open
+    def test_is_port_open_with_free_port_is_false(self):
+        port = get_free_port()
+        self.assertFalse(is_port_open("127.0.0.1", port, timeout=0.5))
+
+    def test_is_port_open_with_listening_socket(self):
+        import socket as _socket
+        srv = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        try:
+            self.assertTrue(is_port_open("127.0.0.1", port, timeout=1.0))
+        finally:
+            srv.close()
+
+    def test_is_port_open_returns_bool(self):
+        self.assertIsInstance(is_port_open("127.0.0.1", 1, timeout=0.2), bool)
+
+    # get_free_port
+    def test_get_free_port_returns_int(self):
+        self.assertIsInstance(get_free_port(), int)
+
+    def test_get_free_port_in_valid_range(self):
+        port = get_free_port()
+        self.assertGreater(port, 0)
+        self.assertLessEqual(port, 65535)
+
+    def test_get_free_port_unique(self):
+        ports = {get_free_port() for _ in range(5)}
+        self.assertGreater(len(ports), 1)
+
+    # ping
+    def test_ping_closed_port_returns_none(self):
+        port = get_free_port()
+        result = ping("127.0.0.1", port, timeout=0.5)
+        self.assertIsNone(result)
+
+    def test_ping_open_port_returns_float(self):
+        import socket as _socket
+        srv = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        try:
+            result = ping("127.0.0.1", port, timeout=1.0)
+            self.assertIsInstance(result, float)
+            self.assertGreaterEqual(result, 0)
+        finally:
+            srv.close()
+
+    # parse_url
+    def test_parse_url_scheme(self):
+        result = net_parse_url("https://example.com/path")
+        self.assertEqual(result["scheme"], "https")
+
+    def test_parse_url_host(self):
+        result = net_parse_url("https://example.com/path")
+        self.assertEqual(result["host"], "example.com")
+
+    def test_parse_url_port(self):
+        result = net_parse_url("https://example.com:8080/path")
+        self.assertEqual(result["port"], 8080)
+
+    def test_parse_url_port_none_when_default(self):
+        result = net_parse_url("https://example.com/path")
+        self.assertIsNone(result["port"])
+
+    def test_parse_url_path(self):
+        result = net_parse_url("https://example.com/api/v1")
+        self.assertEqual(result["path"], "/api/v1")
+
+    def test_parse_url_query(self):
+        result = net_parse_url("https://example.com?foo=bar&baz=1")
+        self.assertIn("foo", result["query"])
+        self.assertEqual(result["query"]["foo"], ["bar"])
+
+    def test_parse_url_fragment(self):
+        result = net_parse_url("https://example.com/page#section")
+        self.assertEqual(result["fragment"], "section")
+
+    def test_parse_url_empty_query(self):
+        result = net_parse_url("https://example.com/path")
+        self.assertEqual(result["query"], {})
+
+    def test_parse_url_returns_dict(self):
+        result = net_parse_url("https://example.com")
+        self.assertIsInstance(result, dict)
+        self.assertIn("scheme", result)
+        self.assertIn("host", result)
+        self.assertIn("port", result)
+        self.assertIn("path", result)
+        self.assertIn("query", result)
+        self.assertIn("fragment", result)
 
 
 class TestTask(unittest.TestCase):
