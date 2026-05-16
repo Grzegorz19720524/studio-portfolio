@@ -122,3 +122,51 @@ class TestContactMessageAPI:
     def test_retrieve_nonexistent_message(self, admin_client):
         response = admin_client.get(f"{self.url}99999/")
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestContactMessageOrdering:
+    url = "/api/contact/"
+
+    def test_messages_returned_newest_first(self, admin_client, db):
+        import time
+        m1 = ContactMessage.objects.create(
+            name="A", email="a@test.com", subject="S1", message="M1",
+        )
+        time.sleep(0.01)
+        m2 = ContactMessage.objects.create(
+            name="B", email="b@test.com", subject="S2", message="M2",
+        )
+        response = admin_client.get(self.url)
+        assert response.status_code == 200
+        ids = [r["id"] for r in response.data["results"]]
+        assert ids[0] == m2.pk
+
+
+@pytest.mark.django_db
+class TestMarkReadEdgeCases:
+    url = "/api/contact/"
+
+    def test_mark_read_invalid_value_returns_error(self, admin_client, message):
+        response = admin_client.patch(
+            f"{self.url}{message.pk}/mark-read/",
+            {"is_read": "not-a-bool"},
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_mark_read_response_contains_is_read(self, admin_client, message):
+        response = admin_client.patch(f"{self.url}{message.pk}/mark-read/", {"is_read": True})
+        assert response.status_code == 200
+        assert "is_read" in response.data
+
+
+@pytest.mark.django_db
+class TestContactPagination:
+    url = "/api/contact/"
+
+    def test_list_response_has_results_key(self, admin_client, message):
+        response = admin_client.get(self.url)
+        assert response.status_code == 200
+        assert "results" in response.data
+        assert "count" in response.data

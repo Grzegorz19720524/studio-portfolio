@@ -329,3 +329,84 @@ class TestUserSerializerIsStaff:
         assert response.status_code == 201
         assert "is_staff" in response.data
         assert response.data["is_staff"] is False
+
+
+@pytest.mark.django_db
+class TestMePatchOptionalFields:
+    url = "/api/auth/me/"
+
+    def test_patch_first_name(self, user_client):
+        response = user_client.patch(self.url, {"first_name": "Jan"})
+        assert response.status_code == 200
+        assert response.data["first_name"] == "Jan"
+
+    def test_patch_last_name(self, user_client):
+        response = user_client.patch(self.url, {"last_name": "Kowalski"})
+        assert response.status_code == 200
+        assert response.data["last_name"] == "Kowalski"
+
+    def test_patch_company(self, user_client):
+        response = user_client.patch(self.url, {"company": "Acme Sp. z o.o."})
+        assert response.status_code == 200
+        assert response.data["company"] == "Acme Sp. z o.o."
+
+    def test_patch_multiple_fields_at_once(self, user_client):
+        response = user_client.patch(
+            self.url,
+            {"first_name": "Anna", "last_name": "Nowak", "phone": "600100200"},
+        )
+        assert response.status_code == 200
+        assert response.data["first_name"] == "Anna"
+        assert response.data["last_name"] == "Nowak"
+        assert response.data["phone"] == "600100200"
+
+    def test_patch_saves_to_db(self, user_client, regular_user):
+        user_client.patch(self.url, {"first_name": "Zapis"})
+        regular_user.refresh_from_db()
+        assert regular_user.first_name == "Zapis"
+
+
+@pytest.mark.django_db
+class TestChangePasswordWeakPassword:
+    url = "/api/auth/change-password/"
+
+    def test_change_password_weak_new_password(self, user_client):
+        data = {
+            "old_password": "user123!",
+            "new_password": "abc",
+            "new_password2": "abc",
+        }
+        response = user_client.post(self.url, data)
+        assert response.status_code == 400
+
+    def test_change_password_numeric_only(self, user_client):
+        data = {
+            "old_password": "user123!",
+            "new_password": "12345678",
+            "new_password2": "12345678",
+        }
+        response = user_client.post(self.url, data)
+        assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestAdminStatsRevenueFormat:
+    url = "/api/admin/stats/"
+
+    def test_revenue_completed_is_string_and_reflects_orders(self, admin_client, db):
+        from django.contrib.auth import get_user_model
+        from orders.models import Order, OrderItem
+        from products.models import Category, Product
+
+        U = get_user_model()
+        u = U.objects.create_user(username="rev_user", password="pass123!")
+        cat = Category.objects.create(name="RevKat", slug="revkat")
+        prod = Product.objects.create(name="RevP", slug="revp", price="250.00", category=cat, is_active=True)
+        order = Order.objects.create(user=u, status="completed")
+        OrderItem.objects.create(order=order, product=prod, quantity=2, unit_price=prod.price)
+        order.recalculate_total()
+
+        response = admin_client.get(self.url)
+        revenue = response.data["orders"]["revenue_completed"]
+        assert isinstance(revenue, str)
+        assert float(revenue) >= 500.0
