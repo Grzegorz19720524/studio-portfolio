@@ -112,6 +112,7 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.pool_utils import ObjectPool, PoolContext
 from util.network_utils import (get_local_ip, get_hostname, resolve_host, is_port_open,
                                 is_online, ping, get_free_port,
                                 parse_url as net_parse_url)
@@ -4103,6 +4104,150 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestObjectPool(unittest.TestCase):
+    def _make_pool(self, max_size=3):
+        counter = [0]
+        def factory():
+            counter[0] += 1
+            return counter[0]
+        return ObjectPool(factory, max_size=max_size), counter
+
+    # acquire
+    def test_acquire_returns_object(self):
+        pool, _ = self._make_pool()
+        obj = pool.acquire()
+        self.assertIsNotNone(obj)
+
+    def test_acquire_calls_factory(self):
+        pool, counter = self._make_pool()
+        pool.acquire()
+        self.assertEqual(counter[0], 1)
+
+    def test_acquire_reuses_released_object(self):
+        pool, counter = self._make_pool()
+        obj = pool.acquire()
+        pool.release(obj)
+        obj2 = pool.acquire()
+        self.assertEqual(obj, obj2)
+        self.assertEqual(counter[0], 1)
+
+    def test_acquire_exhausted_raises(self):
+        pool, _ = self._make_pool(max_size=2)
+        pool.acquire()
+        pool.acquire()
+        with self.assertRaises(RuntimeError):
+            pool.acquire()
+
+    def test_acquire_multiple_unique_objects(self):
+        pool, _ = self._make_pool(max_size=3)
+        objs = [pool.acquire() for _ in range(3)]
+        self.assertEqual(len(set(objs)), 3)
+
+    # release
+    def test_release_increases_available(self):
+        pool, _ = self._make_pool()
+        obj = pool.acquire()
+        self.assertEqual(pool.available(), 0)
+        pool.release(obj)
+        self.assertEqual(pool.available(), 1)
+
+    def test_release_beyond_max_discards(self):
+        pool, _ = self._make_pool(max_size=1)
+        a = pool.acquire()
+        pool.release(a)
+        pool.release(999)
+        self.assertEqual(pool.available(), 1)
+
+    # available / size
+    def test_available_initially_zero(self):
+        pool, _ = self._make_pool()
+        self.assertEqual(pool.available(), 0)
+
+    def test_size_tracks_created(self):
+        pool, _ = self._make_pool()
+        pool.acquire()
+        pool.acquire()
+        self.assertEqual(pool.size(), 2)
+
+    def test_size_does_not_increase_on_reuse(self):
+        pool, _ = self._make_pool()
+        obj = pool.acquire()
+        pool.release(obj)
+        pool.acquire()
+        self.assertEqual(pool.size(), 1)
+
+    # repr
+    def test_repr_contains_available(self):
+        pool, _ = self._make_pool()
+        self.assertIn("available=", repr(pool))
+
+    def test_repr_contains_max(self):
+        pool, _ = self._make_pool(max_size=5)
+        self.assertIn("max=5", repr(pool))
+
+    # thread safety
+    def test_thread_safe_acquire_release(self):
+        pool, _ = self._make_pool(max_size=10)
+        errors = []
+
+        def worker():
+            try:
+                obj = pool.acquire()
+                time.sleep(0.01)
+                pool.release(obj)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        self.assertEqual(errors, [])
+
+
+class TestPoolContext(unittest.TestCase):
+    def _make_pool(self, max_size=3):
+        counter = [0]
+        def factory():
+            counter[0] += 1
+            return counter[0]
+        return ObjectPool(factory, max_size=max_size)
+
+    def test_context_manager_returns_object(self):
+        pool = self._make_pool()
+        with PoolContext(pool) as obj:
+            self.assertIsNotNone(obj)
+
+    def test_context_manager_releases_on_exit(self):
+        pool = self._make_pool()
+        with PoolContext(pool):
+            pass
+        self.assertEqual(pool.available(), 1)
+
+    def test_context_manager_releases_on_exception(self):
+        pool = self._make_pool()
+        try:
+            with PoolContext(pool):
+                raise ValueError("test error")
+        except ValueError:
+            pass
+        self.assertEqual(pool.available(), 1)
+
+    def test_context_manager_object_unavailable_during_use(self):
+        pool = self._make_pool()
+        with PoolContext(pool):
+            self.assertEqual(pool.available(), 0)
+
+    def test_context_manager_reuses_object(self):
+        pool = self._make_pool()
+        with PoolContext(pool) as obj1:
+            pass
+        with PoolContext(pool) as obj2:
+            pass
+        self.assertEqual(obj1, obj2)
 
 
 class TestNetworkUtils(unittest.TestCase):
