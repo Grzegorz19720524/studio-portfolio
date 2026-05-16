@@ -112,6 +112,7 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.scheduler_utils import Task, Scheduler
 from util.thread_utils import (run_in_thread, run_parallel, join_all, current_thread_name,
                                active_count, timeout_call, AtomicInt, RWLock,
                                Debouncer, Throttler, PeriodicTimer, ThreadPool)
@@ -4099,6 +4100,142 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestTask(unittest.TestCase):
+    def _make_task(self, name="t", interval=1.0, repeat=True):
+        return Task(name, lambda: None, interval, repeat)
+
+    def test_initial_run_count(self):
+        self.assertEqual(self._make_task().run_count, 0)
+
+    def test_initial_last_run_is_none(self):
+        self.assertIsNone(self._make_task().last_run)
+
+    def test_not_cancelled_by_default(self):
+        self.assertFalse(self._make_task().is_cancelled())
+
+    def test_cancel_sets_flag(self):
+        t = self._make_task()
+        t.cancel()
+        self.assertTrue(t.is_cancelled())
+
+    def test_repr_contains_name(self):
+        t = self._make_task(name="my_task")
+        self.assertIn("my_task", repr(t))
+
+    def test_repr_contains_interval(self):
+        t = self._make_task(interval=2.5)
+        self.assertIn("2.5", repr(t))
+
+    def test_repr_contains_run_count(self):
+        t = self._make_task()
+        self.assertIn("runs=0", repr(t))
+
+
+class TestScheduler(unittest.TestCase):
+    def setUp(self):
+        self.scheduler = Scheduler()
+
+    def tearDown(self):
+        self.scheduler.cancel_all()
+
+    def test_schedule_returns_task(self):
+        task = self.scheduler.schedule("t", lambda: None, interval=10)
+        self.assertIsInstance(task, Task)
+
+    def test_schedule_task_has_correct_name(self):
+        task = self.scheduler.schedule("my_task", lambda: None, interval=10)
+        self.assertEqual(task.name, "my_task")
+
+    def test_schedule_task_executes(self):
+        done = threading.Event()
+        self.scheduler.schedule("t", done.set, interval=0.05)
+        self.assertTrue(done.wait(timeout=2))
+
+    def test_schedule_repeat_runs_multiple_times(self):
+        results = []
+        self.scheduler.schedule("t", lambda: results.append(1), interval=0.05, repeat=True)
+        time.sleep(0.22)
+        self.assertGreaterEqual(len(results), 3)
+
+    def test_schedule_no_repeat_runs_once(self):
+        results = []
+        self.scheduler.schedule("t", lambda: results.append(1), interval=0.05, repeat=False)
+        time.sleep(0.3)
+        self.assertEqual(len(results), 1)
+
+    def test_schedule_updates_run_count(self):
+        task = self.scheduler.schedule("t", lambda: None, interval=0.05)
+        time.sleep(0.22)
+        self.assertGreaterEqual(task.run_count, 3)
+
+    def test_schedule_updates_last_run(self):
+        task = self.scheduler.schedule("t", lambda: None, interval=0.05)
+        time.sleep(0.12)
+        self.assertIsNotNone(task.last_run)
+
+    def test_cancel_stops_task(self):
+        results = []
+        self.scheduler.schedule("t", lambda: results.append(1), interval=0.05)
+        time.sleep(0.12)
+        self.scheduler.cancel("t")
+        count = len(results)
+        time.sleep(0.2)
+        self.assertEqual(len(results), count)
+
+    def test_cancel_returns_true_for_existing(self):
+        self.scheduler.schedule("t", lambda: None, interval=10)
+        self.assertTrue(self.scheduler.cancel("t"))
+
+    def test_cancel_returns_false_for_missing(self):
+        self.assertFalse(self.scheduler.cancel("nonexistent"))
+
+    def test_cancel_all_stops_all_tasks(self):
+        results = []
+        self.scheduler.schedule("t1", lambda: results.append(1), interval=0.05)
+        self.scheduler.schedule("t2", lambda: results.append(2), interval=0.05)
+        time.sleep(0.12)
+        self.scheduler.cancel_all()
+        count = len(results)
+        time.sleep(0.2)
+        self.assertEqual(len(results), count)
+
+    def test_status_returns_list(self):
+        self.scheduler.schedule("t", lambda: None, interval=10)
+        status = self.scheduler.status()
+        self.assertIsInstance(status, list)
+        self.assertEqual(len(status), 1)
+
+    def test_status_contains_name(self):
+        self.scheduler.schedule("my_task", lambda: None, interval=10)
+        status = self.scheduler.status()
+        self.assertEqual(status[0]["name"], "my_task")
+
+    def test_status_contains_interval(self):
+        self.scheduler.schedule("t", lambda: None, interval=5.0)
+        self.assertEqual(self.scheduler.status()[0]["interval"], 5.0)
+
+    def test_status_cancelled_flag(self):
+        self.scheduler.schedule("t", lambda: None, interval=10)
+        self.scheduler.cancel("t")
+        self.assertTrue(self.scheduler.status()[0]["cancelled"])
+
+    def test_status_last_run_after_execution(self):
+        self.scheduler.schedule("t", lambda: None, interval=0.05)
+        time.sleep(0.12)
+        self.assertIsNotNone(self.scheduler.status()[0]["last_run"])
+
+    def test_repr_contains_task_name(self):
+        self.scheduler.schedule("alpha", lambda: None, interval=10)
+        self.assertIn("alpha", repr(self.scheduler))
+
+    def test_multiple_tasks(self):
+        self.scheduler.schedule("t1", lambda: None, interval=10)
+        self.scheduler.schedule("t2", lambda: None, interval=10)
+        names = [s["name"] for s in self.scheduler.status()]
+        self.assertIn("t1", names)
+        self.assertIn("t2", names)
 
 
 class TestThreadUtils(unittest.TestCase):
