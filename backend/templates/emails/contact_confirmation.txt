@@ -1,0 +1,9 @@
+Dziękujemy za wiadomość, {{ name }}!
+
+Otrzymaliśmy Twoje zgłoszenie i odpowiemy najszybciej jak to możliwe.
+
+Temat: {{ subject }}
+Treść: {{ message }}
+
+Pozdrawiamy,
+Zespół Studio

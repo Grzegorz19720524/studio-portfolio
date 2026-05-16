@@ -1,0 +1,17 @@
+Dziękujemy za złożenie zamówienia!
+
+Numer zamówienia: #{{ order.id }}
+Status: {{ order.get_status_display }}
+Łączna kwota: {{ order.total }} zł
+
+Pozycje:
+{% for item in order.items.all %}
+- {{ item.product.name }} x{{ item.quantity }} — {{ item.subtotal }} zł
+{% endfor %}
+
+{% if order.notes %}
+Uwagi: {{ order.notes }}
+{% endif %}
+
+Pozdrawiamy,
+Zespół Studio

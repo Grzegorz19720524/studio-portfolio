@@ -19,9 +19,11 @@ class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        from .tasks import send_welcome_email
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        send_welcome_email.delay(user.pk)
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
