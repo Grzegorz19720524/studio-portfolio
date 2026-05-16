@@ -1,6 +1,8 @@
 import unittest
 import tempfile
 import os
+import threading
+import time
 from datetime import date
 from util.helpers import slugify, truncate, flatten, chunk, timestamp
 from util.validators import is_email, is_url, is_phone, is_non_empty, is_in_range, is_min_length
@@ -110,6 +112,9 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.thread_utils import (run_in_thread, run_parallel, join_all, current_thread_name,
+                               active_count, timeout_call, AtomicInt, RWLock,
+                               Debouncer, Throttler, PeriodicTimer, ThreadPool)
 from util.yaml_utils import (parse_string as yaml_parse, to_string as yaml_to_str,
                               read_yaml, write_yaml,
                               get as yaml_get, set_value as yaml_set, merge as yaml_merge)
@@ -4094,6 +4099,236 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestThreadUtils(unittest.TestCase):
+    # run_in_thread
+    def test_run_in_thread_executes(self):
+        done = threading.Event()
+        results = []
+        def task():
+            results.append(1)
+            done.set()
+        run_in_thread(task)
+        done.wait(timeout=2)
+        self.assertEqual(results, [1])
+
+    def test_run_in_thread_is_daemon(self):
+        t = run_in_thread(lambda: time.sleep(10))
+        self.assertTrue(t.daemon)
+
+    def test_run_in_thread_non_daemon(self):
+        done = threading.Event()
+        t = run_in_thread(lambda: done.set(), daemon=False)
+        done.wait(timeout=2)
+        self.assertFalse(t.daemon)
+
+    def test_run_in_thread_passes_args(self):
+        results = []
+        t = run_in_thread(results.append, 42)
+        t.join(timeout=2)
+        self.assertEqual(results, [42])
+
+    # run_parallel
+    def test_run_parallel_runs_all(self):
+        results = []
+        lock = threading.Lock()
+        fns = [lambda i=i: (lock.acquire(), results.append(i), lock.release()) for i in range(3)]
+        threads = run_parallel(fns)
+        join_all(threads, timeout=2)
+        self.assertEqual(sorted(results), [0, 1, 2])
+
+    def test_run_parallel_returns_threads(self):
+        threads = run_parallel([lambda: None, lambda: None])
+        self.assertEqual(len(threads), 2)
+        join_all(threads, timeout=2)
+
+    # join_all
+    def test_join_all_waits(self):
+        done = []
+        t = run_in_thread(lambda: (time.sleep(0.05), done.append(1)))
+        join_all([t], timeout=2)
+        self.assertEqual(done, [1])
+
+    def test_join_all_with_timeout(self):
+        t = run_in_thread(lambda: time.sleep(10))
+        join_all([t], timeout=0.05)
+        self.assertTrue(t.is_alive())
+
+    # current_thread_name / active_count
+    def test_current_thread_name_is_string(self):
+        self.assertIsInstance(current_thread_name(), str)
+
+    def test_active_count_positive(self):
+        self.assertGreater(active_count(), 0)
+
+    def test_active_count_increases(self):
+        before = active_count()
+        t = run_in_thread(lambda: time.sleep(1))
+        self.assertGreaterEqual(active_count(), before)
+        t.join(timeout=2)
+
+    # timeout_call
+    def test_timeout_call_returns_value(self):
+        result = timeout_call(lambda: 42, timeout=2)
+        self.assertEqual(result, 42)
+
+    def test_timeout_call_raises_on_timeout(self):
+        with self.assertRaises(TimeoutError):
+            timeout_call(lambda: time.sleep(10), timeout=0.05)
+
+    def test_timeout_call_propagates_exception(self):
+        with self.assertRaises(ValueError):
+            timeout_call(lambda: (_ for _ in ()).throw(ValueError("oops")), timeout=2)
+
+    def test_timeout_call_passes_args(self):
+        result = timeout_call(lambda x, y: x + y, 2, 3, 4)
+        self.assertEqual(result, 7)
+
+    # AtomicInt
+    def test_atomic_int_initial_value(self):
+        a = AtomicInt(10)
+        self.assertEqual(a.get(), 10)
+
+    def test_atomic_int_increment(self):
+        a = AtomicInt(0)
+        self.assertEqual(a.increment(), 1)
+        self.assertEqual(a.increment(5), 6)
+
+    def test_atomic_int_decrement(self):
+        a = AtomicInt(10)
+        self.assertEqual(a.decrement(), 9)
+        self.assertEqual(a.decrement(4), 5)
+
+    def test_atomic_int_set(self):
+        a = AtomicInt(0)
+        a.set(99)
+        self.assertEqual(a.get(), 99)
+
+    def test_atomic_int_repr(self):
+        self.assertIn("AtomicInt", repr(AtomicInt(7)))
+
+    def test_atomic_int_thread_safe(self):
+        counter = AtomicInt(0)
+        threads = [run_in_thread(lambda: [counter.increment() for _ in range(100)]) for _ in range(5)]
+        join_all(threads, timeout=5)
+        self.assertEqual(counter.get(), 500)
+
+    # RWLock
+    def test_rwlock_acquire_release_read(self):
+        lock = RWLock()
+        lock.acquire_read()
+        lock.release_read()
+
+    def test_rwlock_multiple_readers(self):
+        lock = RWLock()
+        lock.acquire_read()
+        lock.acquire_read()
+        lock.release_read()
+        lock.release_read()
+
+    def test_rwlock_acquire_release_write(self):
+        lock = RWLock()
+        lock.acquire_write()
+        lock.release_write()
+
+    # Debouncer
+    def test_debouncer_fires_once(self):
+        fired = []
+        db = Debouncer(lambda: fired.append(1), delay=0.1)
+        for _ in range(5):
+            db()
+            time.sleep(0.01)
+        time.sleep(0.2)
+        self.assertEqual(len(fired), 1)
+
+    def test_debouncer_cancel_prevents_fire(self):
+        fired = []
+        db = Debouncer(lambda: fired.append(1), delay=0.2)
+        db()
+        db.cancel()
+        time.sleep(0.3)
+        self.assertEqual(len(fired), 0)
+
+    def test_debouncer_fires_after_delay(self):
+        fired = []
+        db = Debouncer(lambda: fired.append(1), delay=0.05)
+        db()
+        time.sleep(0.15)
+        self.assertEqual(len(fired), 1)
+
+    # Throttler
+    def test_throttler_allows_first_call(self):
+        results = []
+        th = Throttler(lambda: results.append(1), interval=1.0)
+        th()
+        self.assertEqual(results, [1])
+
+    def test_throttler_blocks_rapid_calls(self):
+        results = []
+        th = Throttler(lambda: results.append(1), interval=1.0)
+        for _ in range(5):
+            th()
+        self.assertEqual(len(results), 1)
+
+    def test_throttler_allows_after_interval(self):
+        results = []
+        th = Throttler(lambda: results.append(1), interval=0.05)
+        th()
+        time.sleep(0.1)
+        th()
+        self.assertEqual(len(results), 2)
+
+    def test_throttler_returns_none_when_blocked(self):
+        th = Throttler(lambda: 42, interval=1.0)
+        th()
+        result = th()
+        self.assertIsNone(result)
+
+    # PeriodicTimer
+    def test_periodic_timer_fires_multiple_times(self):
+        ticks = []
+        pt = PeriodicTimer(lambda: ticks.append(1), interval=0.05)
+        pt.start()
+        time.sleep(0.22)
+        pt.stop()
+        self.assertGreaterEqual(len(ticks), 3)
+
+    def test_periodic_timer_stops(self):
+        ticks = []
+        pt = PeriodicTimer(lambda: ticks.append(1), interval=0.05)
+        pt.start()
+        time.sleep(0.12)
+        pt.stop()
+        count_after_stop = len(ticks)
+        time.sleep(0.15)
+        self.assertEqual(len(ticks), count_after_stop)
+
+    # ThreadPool
+    def test_thread_pool_executes_tasks(self):
+        results = []
+        lock = threading.Lock()
+        pool = ThreadPool(workers=2)
+        for i in range(5):
+            pool.submit(lambda n=i: (lock.acquire(), results.append(n), lock.release()))
+        pool.wait()
+        self.assertEqual(sorted(results), [0, 1, 2, 3, 4])
+
+    def test_thread_pool_wait_blocks_until_done(self):
+        done = threading.Event()
+        pool = ThreadPool(workers=1)
+        pool.submit(lambda: (time.sleep(0.05), done.set()))
+        pool.wait()
+        self.assertTrue(done.is_set())
+
+    def test_thread_pool_multiple_workers(self):
+        results = []
+        lock = threading.Lock()
+        pool = ThreadPool(workers=4)
+        for i in range(8):
+            pool.submit(lambda n=i: (lock.acquire(), results.append(n), lock.release()))
+        pool.wait()
+        self.assertEqual(len(results), 8)
 
 
 YAML_TEXT = """\
