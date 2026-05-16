@@ -27,6 +27,11 @@ export default function Navbar() {
             <Link to="/dashboard" className="text-gray-600 hover:text-indigo-600 transition-colors">
               Dashboard
             </Link>
+            {user.is_staff && (
+              <Link to="/admin" className="text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">
+                Admin
+              </Link>
+            )}
             <Link to="/orders" className="text-gray-600 hover:text-indigo-600 transition-colors">
               Zamówienia
             </Link>
