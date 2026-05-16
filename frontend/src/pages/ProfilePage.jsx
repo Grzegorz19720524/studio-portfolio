@@ -59,8 +59,9 @@ export default function ProfilePage() {
             ['company', 'Firma', 'text'],
           ].map(([name, label, type]) => (
             <div key={name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
               <input
+                id={name}
                 type={type}
                 value={form[name]}
                 onChange={(e) => setForm({ ...form, [name]: e.target.value })}
@@ -85,8 +86,9 @@ export default function ProfilePage() {
             ['new_password2', 'Powtórz nowe hasło'],
           ].map(([name, label]) => (
             <div key={name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
               <input
+                id={name}
                 type="password"
                 value={pwForm[name]}
                 onChange={(e) => setPwForm({ ...pwForm, [name]: e.target.value })}
