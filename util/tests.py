@@ -110,6 +110,9 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.yaml_utils import (parse_string as yaml_parse, to_string as yaml_to_str,
+                              read_yaml, write_yaml,
+                              get as yaml_get, set_value as yaml_set, merge as yaml_merge)
 from util.toml_utils import (parse_string as toml_parse, to_string as toml_to_str,
                               get as toml_get, set_value as toml_set, has_key as toml_has_key,
                               merge as toml_merge, flatten_keys, keys_at, write_toml, read_toml)
@@ -4091,6 +4094,181 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+YAML_TEXT = """\
+project:
+  name: MyApp
+  version: 1
+  debug: false
+
+database:
+  host: localhost
+  port: 5432
+  pool:
+    min: 2
+    max: 10
+
+tags:
+  - python
+  - yaml
+  - utils
+"""
+
+
+class TestYamlUtils(unittest.TestCase):
+    def setUp(self):
+        self.data = yaml_parse(YAML_TEXT)
+
+    # parse_string
+    def test_parse_returns_dict(self):
+        self.assertIsInstance(self.data, dict)
+
+    def test_parse_scalar_string(self):
+        self.assertEqual(self.data["project"]["name"], "MyApp")
+
+    def test_parse_scalar_int(self):
+        self.assertEqual(self.data["database"]["port"], 5432)
+
+    def test_parse_scalar_bool_false(self):
+        self.assertFalse(self.data["project"]["debug"])
+
+    def test_parse_nested_dict(self):
+        self.assertEqual(self.data["database"]["pool"]["max"], 10)
+
+    def test_parse_list(self):
+        self.assertEqual(self.data["tags"], ["python", "yaml", "utils"])
+
+    def test_parse_empty_string(self):
+        self.assertEqual(yaml_parse(""), {})
+
+    def test_parse_comment_ignored(self):
+        result = yaml_parse("# comment\nkey: value\n")
+        self.assertEqual(result["key"], "value")
+
+    def test_parse_null(self):
+        result = yaml_parse("key: null\n")
+        self.assertIsNone(result["key"])
+
+    def test_parse_bool_true_variants(self):
+        for val in ("true", "True", "yes", "Yes"):
+            result = yaml_parse(f"flag: {val}\n")
+            self.assertTrue(result["flag"], msg=f"failed for {val!r}")
+
+    def test_parse_bool_false_variants(self):
+        for val in ("false", "False", "no", "No"):
+            result = yaml_parse(f"flag: {val}\n")
+            self.assertFalse(result["flag"], msg=f"failed for {val!r}")
+
+    def test_parse_float(self):
+        result = yaml_parse("ratio: 3.14\n")
+        self.assertAlmostEqual(result["ratio"], 3.14)
+
+    def test_parse_quoted_string(self):
+        result = yaml_parse('greeting: "hello world"\n')
+        self.assertEqual(result["greeting"], "hello world")
+
+    # get
+    def test_get_top_level(self):
+        self.assertEqual(yaml_get(self.data, "tags"), ["python", "yaml", "utils"])
+
+    def test_get_nested(self):
+        self.assertEqual(yaml_get(self.data, "database.pool.min"), 2)
+
+    def test_get_missing_returns_none(self):
+        self.assertIsNone(yaml_get(self.data, "missing.key"))
+
+    def test_get_missing_returns_default(self):
+        self.assertEqual(yaml_get(self.data, "missing.key", "N/A"), "N/A")
+
+    # set_value
+    def test_set_new_key(self):
+        yaml_set(self.data, "cache.ttl", 300)
+        self.assertEqual(yaml_get(self.data, "cache.ttl"), 300)
+
+    def test_set_overwrite_existing(self):
+        yaml_set(self.data, "database.port", 5433)
+        self.assertEqual(yaml_get(self.data, "database.port"), 5433)
+
+    def test_set_deep_nested(self):
+        yaml_set(self.data, "a.b.c.d", 42)
+        self.assertEqual(yaml_get(self.data, "a.b.c.d"), 42)
+
+    # merge
+    def test_merge_override_value(self):
+        merged = yaml_merge(self.data, {"database": {"port": 9999}})
+        self.assertEqual(yaml_get(merged, "database.port"), 9999)
+
+    def test_merge_preserves_base(self):
+        merged = yaml_merge(self.data, {"new": "val"})
+        self.assertEqual(yaml_get(merged, "project.name"), "MyApp")
+
+    def test_merge_adds_new_key(self):
+        merged = yaml_merge(self.data, {"redis": {"host": "localhost"}})
+        self.assertEqual(yaml_get(merged, "redis.host"), "localhost")
+
+    def test_merge_deep_recursive(self):
+        merged = yaml_merge(self.data, {"database": {"pool": {"max": 20}}})
+        self.assertEqual(yaml_get(merged, "database.pool.max"), 20)
+        self.assertEqual(yaml_get(merged, "database.pool.min"), 2)
+
+    # to_string
+    def test_to_string_contains_key(self):
+        s = yaml_to_str({"app": "Test", "port": 8080})
+        self.assertIn("app", s)
+        self.assertIn("8080", s)
+
+    def test_to_string_bool(self):
+        s = yaml_to_str({"flag": True})
+        self.assertIn("true", s)
+
+    def test_to_string_null(self):
+        s = yaml_to_str({"key": None})
+        self.assertIn("null", s)
+
+    def test_to_string_list(self):
+        s = yaml_to_str({"items": [1, 2, 3]})
+        self.assertIn("- 1", s)
+
+    def test_to_string_empty_list(self):
+        s = yaml_to_str({"items": []})
+        self.assertIn("[]", s)
+
+    def test_to_string_empty_dict(self):
+        s = yaml_to_str({"nested": {}})
+        self.assertIn("{}", s)
+
+    def test_round_trip(self):
+        original = {"app": {"name": "Test", "port": 8080, "debug": False}, "items": [1, 2, 3]}
+        parsed = yaml_parse(yaml_to_str(original))
+        self.assertEqual(parsed["app"]["name"], "Test")
+        self.assertEqual(parsed["app"]["port"], 8080)
+        self.assertFalse(parsed["app"]["debug"])
+        self.assertEqual(parsed["items"], [1, 2, 3])
+
+    # write_yaml / read_yaml
+    def test_write_and_read_yaml(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            tmp = f.name
+        try:
+            write_yaml(tmp, {"x": 1, "y": "hello", "flag": True})
+            result = read_yaml(tmp)
+            self.assertEqual(result["x"], 1)
+            self.assertEqual(result["y"], "hello")
+            self.assertTrue(result["flag"])
+        finally:
+            os.unlink(tmp)
+
+    def test_write_and_read_nested(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            tmp = f.name
+        try:
+            write_yaml(tmp, {"db": {"host": "localhost", "port": 5432}})
+            result = read_yaml(tmp)
+            self.assertEqual(result["db"]["host"], "localhost")
+            self.assertEqual(result["db"]["port"], 5432)
+        finally:
+            os.unlink(tmp)
 
 
 if __name__ == "__main__":
