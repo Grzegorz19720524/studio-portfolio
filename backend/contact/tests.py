@@ -78,3 +78,47 @@ class TestContactMessageAPI:
     def test_delete_message_forbidden_for_user(self, user_client, message):
         response = user_client.delete(f"{self.url}{message.pk}/")
         assert response.status_code == 403
+
+    def test_delete_message_forbidden_anonymous(self, api_client, message):
+        response = api_client.delete(f"{self.url}{message.pk}/")
+        assert response.status_code == 403
+
+    def test_delete_nonexistent_message(self, admin_client):
+        response = admin_client.delete(f"{self.url}99999/")
+        assert response.status_code == 404
+
+    def test_mark_unread(self, admin_client, message):
+        message.is_read = True
+        message.save()
+        response = admin_client.patch(f"{self.url}{message.pk}/mark-read/", {"is_read": False})
+        assert response.status_code == 200
+        message.refresh_from_db()
+        assert message.is_read is False
+
+    def test_mark_read_anonymous(self, api_client, message):
+        response = api_client.patch(f"{self.url}{message.pk}/mark-read/", {"is_read": True})
+        assert response.status_code == 403
+
+    def test_message_is_unread_by_default(self, api_client):
+        data = {
+            "name": "Nowy",
+            "email": "nowy@test.com",
+            "subject": "Nowe zapytanie",
+            "message": "Treść nowego zapytania.",
+        }
+        api_client.post(self.url, data)
+        msg = ContactMessage.objects.get(email="nowy@test.com")
+        assert msg.is_read is False
+
+    def test_multiple_messages_listed(self, admin_client, message):
+        ContactMessage.objects.create(
+            name="Druga", email="druga@test.com",
+            subject="Drugi temat", message="Druga treść.",
+        )
+        response = admin_client.get(self.url)
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 2
+
+    def test_retrieve_nonexistent_message(self, admin_client):
+        response = admin_client.get(f"{self.url}99999/")
+        assert response.status_code == 404
