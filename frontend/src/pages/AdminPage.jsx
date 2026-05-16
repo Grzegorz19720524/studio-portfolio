@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
+  getAdminStats,
   getAdminUsers, updateAdminUser,
   getAdminOrders, setOrderStatus,
   getContactMessages, markMessageRead, deleteMessage,
   getAdminProducts, getAdminCategories, createProduct, updateProduct, deleteProduct,
 } from '../api/admin'
 
-const TABS = ['Zamówienia', 'Użytkownicy', 'Wiadomości', 'Produkty']
+const TABS = ['Statystyki', 'Zamówienia', 'Użytkownicy', 'Wiadomości', 'Produkty']
 
 const ORDER_STATUSES = [
   { value: 'pending',     label: 'Oczekuje' },
@@ -47,10 +48,129 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 0 && <OrdersTab />}
-      {tab === 1 && <UsersTab />}
-      {tab === 2 && <MessagesTab />}
-      {tab === 3 && <ProductsTab />}
+      {tab === 0 && <StatsTab />}
+      {tab === 1 && <OrdersTab />}
+      {tab === 2 && <UsersTab />}
+      {tab === 3 && <MessagesTab />}
+      {tab === 4 && <ProductsTab />}
+    </div>
+  )
+}
+
+/* ─── Stats ─── */
+
+const ORDER_STATUS_LABELS = {
+  pending:     'Oczekuje',
+  confirmed:   'Potwierdzone',
+  in_progress: 'W realizacji',
+  completed:   'Zakończone',
+  cancelled:   'Anulowane',
+}
+
+const ORDER_STATUS_COLORS = {
+  pending:     'bg-yellow-400',
+  confirmed:   'bg-blue-400',
+  in_progress: 'bg-purple-400',
+  completed:   'bg-green-400',
+  cancelled:   'bg-red-400',
+}
+
+function StatsTab() {
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getAdminStats()
+      .then(({ data }) => setStats(data))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Spinner />
+  if (!stats) return <Empty text="Brak danych." />
+
+  const totalOrdersForBar = stats.orders.total || 1
+
+  return (
+    <div className="space-y-8">
+      {/* Kafelki */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <BigStat label="Użytkownicy" value={stats.users.total} sub={`${stats.users.new_30d} nowych w ciągu 30 dni`} color="indigo" />
+        <BigStat label="Zamówienia" value={stats.orders.total} sub={`${stats.orders.new_30d} nowych w ciągu 30 dni`} color="purple" />
+        <BigStat label="Produkty" value={stats.products.total} sub={`${stats.products.active} aktywnych · ${stats.products.inactive} nieaktywnych`} color="blue" />
+        <BigStat label="Przychód (zakończone)" value={`${Number(stats.orders.revenue_completed).toLocaleString('pl-PL')} zł`} sub="tylko zamówienia ze statusem Zakończone" color="green" />
+      </div>
+
+      {/* Zamówienia wg statusu */}
+      <section className="bg-white border border-gray-200 rounded-xl p-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-5">Zamówienia według statusu</h2>
+        <div className="space-y-3">
+          {Object.entries(ORDER_STATUS_LABELS).map(([key, label]) => {
+            const count = stats.orders.by_status[key] || 0
+            const pct = Math.round((count / totalOrdersForBar) * 100)
+            return (
+              <div key={key}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">{label}</span>
+                  <span className="font-semibold text-gray-900">{count}</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${ORDER_STATUS_COLORS[key]}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Użytkownicy i Wiadomości */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <section className="bg-white border border-gray-200 rounded-xl p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Użytkownicy</h2>
+          <dl className="space-y-2 text-sm">
+            <StatRow label="Wszyscy" value={stats.users.total} />
+            <StatRow label="Aktywni" value={stats.users.active} />
+            <StatRow label="Administratorzy" value={stats.users.staff} />
+            <StatRow label="Nowi (ostatnie 30 dni)" value={stats.users.new_30d} highlight />
+          </dl>
+        </section>
+
+        <section className="bg-white border border-gray-200 rounded-xl p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Wiadomości kontaktowe</h2>
+          <dl className="space-y-2 text-sm">
+            <StatRow label="Wszystkie" value={stats.messages.total} />
+            <StatRow label="Nieprzeczytane" value={stats.messages.unread} highlight={stats.messages.unread > 0} />
+            <StatRow label="Przeczytane" value={stats.messages.total - stats.messages.unread} />
+          </dl>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function BigStat({ label, value, sub, color }) {
+  const colors = {
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    purple: 'border-purple-200 bg-purple-50 text-purple-700',
+    blue:   'border-blue-200 bg-blue-50 text-blue-700',
+    green:  'border-green-200 bg-green-50 text-green-700',
+  }
+  return (
+    <div className={`border rounded-xl p-5 ${colors[color]}`}>
+      <p className="text-3xl font-bold">{value}</p>
+      <p className="text-sm font-medium mt-1">{label}</p>
+      <p className="text-xs opacity-70 mt-1">{sub}</p>
+    </div>
+  )
+}
+
+function StatRow({ label, value, highlight }) {
+  return (
+    <div className="flex justify-between">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className={`font-semibold ${highlight ? 'text-indigo-600' : 'text-gray-900'}`}>{value}</dd>
     </div>
   )
 }
