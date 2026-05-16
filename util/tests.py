@@ -112,6 +112,7 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.plugin_utils import Plugin, PluginRegistry
 from util.pool_utils import ObjectPool, PoolContext
 from util.network_utils import (get_local_ip, get_hostname, resolve_host, is_port_open,
                                 is_online, ping, get_free_port,
@@ -4104,6 +4105,173 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestPlugin(unittest.TestCase):
+    def _make_plugin(self, name="test", version="1.0.0"):
+        p = Plugin()
+        p.name = name
+        p.version = version
+        return p
+
+    def test_default_name_empty(self):
+        self.assertEqual(Plugin.name, "")
+
+    def test_default_version(self):
+        self.assertEqual(Plugin.version, "1.0.0")
+
+    def test_default_description_empty(self):
+        self.assertEqual(Plugin.description, "")
+
+    def test_setup_does_not_raise(self):
+        self._make_plugin().setup()
+
+    def test_teardown_does_not_raise(self):
+        self._make_plugin().teardown()
+
+    def test_repr_contains_name(self):
+        p = self._make_plugin(name="my_plugin")
+        self.assertIn("my_plugin", repr(p))
+
+    def test_repr_contains_version(self):
+        p = self._make_plugin(version="2.5.0")
+        self.assertIn("2.5.0", repr(p))
+
+
+class TestPluginRegistry(unittest.TestCase):
+    def _make_registry(self):
+        return PluginRegistry()
+
+    def _make_plugin(self, name, version="1.0.0"):
+        p = Plugin()
+        p.name = name
+        p.version = version
+        return p
+
+    # register
+    def test_register_plugin(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        self.assertTrue(reg.is_registered("a"))
+
+    def test_register_unnamed_raises(self):
+        reg = self._make_registry()
+        p = Plugin()
+        with self.assertRaises(ValueError):
+            reg.register(p)
+
+    def test_register_duplicate_raises(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        with self.assertRaises(ValueError):
+            reg.register(self._make_plugin("a"))
+
+    def test_register_calls_setup(self):
+        reg = self._make_registry()
+        called = []
+        p = self._make_plugin("a")
+        p.setup = lambda: called.append(1)
+        reg.register(p)
+        self.assertEqual(called, [1])
+
+    # unregister
+    def test_unregister_returns_true(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        self.assertTrue(reg.unregister("a"))
+
+    def test_unregister_missing_returns_false(self):
+        reg = self._make_registry()
+        self.assertFalse(reg.unregister("nonexistent"))
+
+    def test_unregister_removes_plugin(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        reg.unregister("a")
+        self.assertFalse(reg.is_registered("a"))
+
+    def test_unregister_calls_teardown(self):
+        reg = self._make_registry()
+        called = []
+        p = self._make_plugin("a")
+        p.teardown = lambda: called.append(1)
+        reg.register(p)
+        reg.unregister("a")
+        self.assertEqual(called, [1])
+
+    # get
+    def test_get_existing(self):
+        reg = self._make_registry()
+        p = self._make_plugin("a")
+        reg.register(p)
+        self.assertIs(reg.get("a"), p)
+
+    def test_get_missing_returns_none(self):
+        reg = self._make_registry()
+        self.assertIsNone(reg.get("missing"))
+
+    # all
+    def test_all_returns_list(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        reg.register(self._make_plugin("b"))
+        self.assertEqual(len(reg.all()), 2)
+
+    def test_all_empty(self):
+        self.assertEqual(self._make_registry().all(), [])
+
+    # hook / trigger
+    def test_hook_registers_handler(self):
+        reg = self._make_registry()
+        results = []
+        reg.hook("on_start")(lambda: results.append(1))
+        reg.trigger("on_start")
+        self.assertEqual(results, [1])
+
+    def test_hook_multiple_handlers(self):
+        reg = self._make_registry()
+        results = []
+        reg.hook("ev")(lambda: results.append("a"))
+        reg.hook("ev")(lambda: results.append("b"))
+        reg.trigger("ev")
+        self.assertEqual(results, ["a", "b"])
+
+    def test_trigger_passes_args(self):
+        reg = self._make_registry()
+        received = []
+        reg.hook("ev")(lambda x, y: received.append((x, y)))
+        reg.trigger("ev", 1, 2)
+        self.assertEqual(received, [(1, 2)])
+
+    def test_trigger_returns_results(self):
+        reg = self._make_registry()
+        reg.hook("ev")(lambda: 42)
+        results = reg.trigger("ev")
+        self.assertEqual(results, [42])
+
+    def test_trigger_unknown_event_returns_empty(self):
+        reg = self._make_registry()
+        self.assertEqual(reg.trigger("unknown"), [])
+
+    # is_registered / len / repr
+    def test_is_registered_true(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        self.assertTrue(reg.is_registered("a"))
+
+    def test_is_registered_false(self):
+        self.assertFalse(self._make_registry().is_registered("x"))
+
+    def test_len(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("a"))
+        reg.register(self._make_plugin("b"))
+        self.assertEqual(len(reg), 2)
+
+    def test_repr_contains_plugin_name(self):
+        reg = self._make_registry()
+        reg.register(self._make_plugin("alpha"))
+        self.assertIn("alpha", repr(reg))
 
 
 class TestObjectPool(unittest.TestCase):
