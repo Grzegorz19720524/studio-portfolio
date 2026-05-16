@@ -112,6 +112,9 @@ from util.iterator_utils import (chunks, sliding_window, pairwise, flatten as it
                                   product, permutations, combinations,
                                   combinations_with_replacement, Peekable)
 from util.template_utils import (render, render_safe, register_filter, escape_html, Template)
+from util.io_utils import (read_lines, write_lines, read_bytes, write_bytes, append_text,
+                           head, tail, count_lines, grep, stream_lines, find_files,
+                           atomic_write, backup, checksum, touch, file_size)
 from util.plugin_utils import Plugin, PluginRegistry
 from util.pool_utils import ObjectPool, PoolContext
 from util.network_utils import (get_local_ip, get_hostname, resolve_host, is_port_open,
@@ -4105,6 +4108,186 @@ class TestIniUtils(unittest.TestCase):
         s = ini_to_str(cfg)
         self.assertIn("section", s)
         self.assertIn("key", s)
+
+
+class TestIoUtils(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
+        self.tmp.write("\n".join(f"line {i}" for i in range(1, 11)))
+        self.tmp.close()
+        self.path = self.tmp.name
+
+    def tearDown(self):
+        for p in [self.path, self.path + ".bak"]:
+            if os.path.exists(p):
+                os.unlink(p)
+
+    # read_lines / write_lines
+    def test_read_lines_returns_list(self):
+        lines = read_lines(self.path)
+        self.assertIsInstance(lines, list)
+        self.assertEqual(len(lines), 10)
+
+    def test_read_lines_content(self):
+        self.assertEqual(read_lines(self.path)[0], "line 1")
+
+    def test_write_lines_and_read_back(self):
+        write_lines(self.path, ["a", "b", "c"])
+        self.assertEqual(read_lines(self.path), ["a", "b", "c"])
+
+    def test_write_lines_overwrites(self):
+        write_lines(self.path, ["x"])
+        self.assertEqual(read_lines(self.path), ["x"])
+
+    # read_bytes / write_bytes
+    def test_read_bytes_returns_bytes(self):
+        self.assertIsInstance(read_bytes(self.path), bytes)
+
+    def test_write_bytes_and_read_back(self):
+        write_bytes(self.path, b"\x00\x01\x02")
+        self.assertEqual(read_bytes(self.path), b"\x00\x01\x02")
+
+    # append_text
+    def test_append_text_adds_content(self):
+        append_text(self.path, "\nextra line")
+        with open(self.path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("extra line", content)
+
+    def test_append_text_preserves_existing(self):
+        with open(self.path, encoding="utf-8") as f:
+            original = f.read()
+        append_text(self.path, "\nmore")
+        with open(self.path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertTrue(content.startswith(original))
+
+    # head
+    def test_head_returns_n_lines(self):
+        self.assertEqual(len(head(self.path, 3)), 3)
+
+    def test_head_content(self):
+        self.assertEqual(head(self.path, 2), ["line 1", "line 2"])
+
+    def test_head_more_than_file(self):
+        self.assertEqual(len(head(self.path, 100)), 10)
+
+    # tail
+    def test_tail_returns_n_lines(self):
+        self.assertEqual(len(tail(self.path, 3)), 3)
+
+    def test_tail_content(self):
+        self.assertEqual(tail(self.path, 2), ["line 9", "line 10"])
+
+    def test_tail_more_than_file(self):
+        self.assertEqual(len(tail(self.path, 100)), 10)
+
+    # count_lines
+    def test_count_lines(self):
+        self.assertEqual(count_lines(self.path), 10)
+
+    def test_count_lines_empty(self):
+        write_lines(self.path, [])
+        self.assertEqual(count_lines(self.path), 0)
+
+    # grep
+    def test_grep_returns_matches(self):
+        matches = grep(self.path, r"line 1")
+        self.assertTrue(len(matches) >= 1)
+
+    def test_grep_returns_tuples_with_line_number(self):
+        matches = grep(self.path, r"line 1$")
+        self.assertEqual(matches[0][0], 1)
+
+    def test_grep_no_match_returns_empty(self):
+        self.assertEqual(grep(self.path, r"zzznomatch"), [])
+
+    def test_grep_line_content(self):
+        matches = grep(self.path, r"line 5")
+        self.assertIn("line 5", matches[0][1])
+
+    # stream_lines
+    def test_stream_lines_yields_strings(self):
+        lines = list(stream_lines(self.path))
+        self.assertEqual(len(lines), 10)
+        self.assertIsInstance(lines[0], str)
+
+    def test_stream_lines_content(self):
+        lines = list(stream_lines(self.path))
+        self.assertEqual(lines[0], "line 1")
+
+    # find_files
+    def test_find_files_finds_file(self):
+        d = os.path.dirname(self.path)
+        name = os.path.basename(self.path)
+        files = find_files(d, name)
+        self.assertIn(self.path, files)
+
+    def test_find_files_returns_sorted(self):
+        files = find_files(os.path.dirname(self.path))
+        self.assertEqual(files, sorted(files))
+
+    # atomic_write
+    def test_atomic_write_content(self):
+        atomic_write(self.path, "hello\nworld")
+        self.assertEqual(read_lines(self.path), ["hello", "world"])
+
+    def test_atomic_write_overwrites(self):
+        atomic_write(self.path, "new content")
+        with open(self.path, encoding="utf-8") as f:
+            self.assertNotIn("line 1", f.read())
+
+    # backup
+    def test_backup_creates_bak_file(self):
+        bak = backup(self.path)
+        self.assertTrue(os.path.exists(bak))
+        self.assertEqual(bak, self.path + ".bak")
+
+    def test_backup_same_content(self):
+        bak = backup(self.path)
+        self.assertEqual(read_bytes(self.path), read_bytes(bak))
+
+    # checksum
+    def test_checksum_returns_string(self):
+        self.assertIsInstance(checksum(self.path), str)
+
+    def test_checksum_sha256_length(self):
+        self.assertEqual(len(checksum(self.path, "sha256")), 64)
+
+    def test_checksum_md5_length(self):
+        self.assertEqual(len(checksum(self.path, "md5")), 32)
+
+    def test_checksum_changes_with_content(self):
+        c1 = checksum(self.path)
+        atomic_write(self.path, "different content")
+        c2 = checksum(self.path)
+        self.assertNotEqual(c1, c2)
+
+    # touch
+    def test_touch_creates_file(self):
+        new_path = self.path + ".new"
+        try:
+            touch(new_path)
+            self.assertTrue(os.path.exists(new_path))
+        finally:
+            if os.path.exists(new_path):
+                os.unlink(new_path)
+
+    def test_touch_existing_does_not_raise(self):
+        touch(self.path)
+
+    # file_size
+    def test_file_size_returns_int(self):
+        self.assertIsInstance(file_size(self.path), int)
+
+    def test_file_size_positive(self):
+        self.assertGreater(file_size(self.path), 0)
+
+    def test_file_size_changes_after_write(self):
+        s1 = file_size(self.path)
+        atomic_write(self.path, "x")
+        s2 = file_size(self.path)
+        self.assertNotEqual(s1, s2)
 
 
 class TestPlugin(unittest.TestCase):
