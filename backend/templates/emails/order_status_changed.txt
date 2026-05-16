@@ -1,0 +1,7 @@
+Status Twojego zamówienia #{{ order.id }} został zmieniony.
+
+Nowy status: {{ order.get_status_display }}
+Łączna kwota: {{ order.total }} zł
+
+Pozdrawiamy,
+Zespół Studio

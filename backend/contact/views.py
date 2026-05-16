@@ -27,9 +27,12 @@ class ContactMessageViewSet(viewsets.ModelViewSet):
         return [permissions.IsAdminUser()]
 
     def create(self, request, *args, **kwargs):
+        from .tasks import send_contact_confirmation, notify_admins_new_contact
         serializer = ContactMessageCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        msg = serializer.save()
+        send_contact_confirmation.delay(msg.pk)
+        notify_admins_new_contact.delay(msg.pk)
         return Response(
             {"detail": "Wiadomość została wysłana."},
             status=status.HTTP_201_CREATED,

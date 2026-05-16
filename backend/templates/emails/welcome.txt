@@ -1,0 +1,8 @@
+Witaj, {{ username }}!
+
+Twoje konto w Studio zostało pomyślnie utworzone.
+
+Możesz teraz zalogować się i składać zamówienia.
+
+Pozdrawiamy,
+Zespół Studio

@@ -1,8 +1,18 @@
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 User = get_user_model()
+
+# Uruchamia zadania Celery synchronicznie w testach (bez Redis)
+pytest_plugins = []
+
+
+@pytest.fixture(autouse=True)
+def celery_eager(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
 
 
 @pytest.fixture

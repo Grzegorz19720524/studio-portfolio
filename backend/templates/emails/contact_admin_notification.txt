@@ -1,0 +1,7 @@
+Nowa wiadomość kontaktowa od {{ name }} ({{ email }}).
+
+Temat: {{ subject }}
+Treść:
+{{ message }}
+
+Zaloguj się do panelu admina, aby zobaczyć szczegóły.

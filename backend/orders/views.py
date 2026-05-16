@@ -41,9 +41,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
+        from .tasks import send_order_confirmation
         serializer = OrderCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
+        send_order_confirmation.delay(order.pk)
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -56,8 +58,10 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["patch"], url_path="status")
     def set_status(self, request, pk=None):
+        from .tasks import send_order_status_changed
         order = self.get_object()
         serializer = OrderStatusSerializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        send_order_status_changed.delay(order.pk)
         return Response(OrderSerializer(order).data)
